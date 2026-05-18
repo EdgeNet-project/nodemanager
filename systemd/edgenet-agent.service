@@ -1,0 +1,14 @@
+[Unit]
+Description=EdgeNet Node Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/edgenet-agent --config /etc/edgenet/agent.conf
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
