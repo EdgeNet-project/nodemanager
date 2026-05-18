@@ -147,32 +147,32 @@ func updateUI(logger *zap.Logger) {
 	state.mu.RUnlock()
 
 	switch status {
-	case "CHECKIN":
+	case "checkin":
 		message = fmt.Sprintf(`This node is part of the PlanetLab testbed.
 
 To activate this node you have to add it to your account:
 
-1. Visit https://planetlab.io
+1. Visit https://console.planetlab.io
 2. Login or register
 3. Go to "Add Node"
 4. Use this code: %s
 
 Node Name: %s
+
 `, code, name)
-	case "REGISTERED":
+	case "registered":
 		message = `This node is part of the PlanetLab testbed.
 
 This node is not enabled yet. Please wait for administrator approval.
 `
-	case "ENABLED":
+	default:
 		message = fmt.Sprintf(`This node is part of the PlanetLab testbed.
 
+For more information, visit https://planetlab.io
+
 Node Name: %s
-Status: ENABLED
-This node is an active part of PlanetLab.
+
 `, name)
-	default:
-		message = fmt.Sprintf("Node Status: %s\n", status)
 	}
 
 	if err := os.WriteFile("/etc/issue", []byte(message), 0644); err != nil {
