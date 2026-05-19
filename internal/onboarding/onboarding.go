@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/edgenet-project/edgenet-agent/internal/config"
-	"github.com/edgenet-project/edgenet-agent/internal/identity"
 	"github.com/edgenet-project/edgenet-agent/internal/network"
 	"github.com/edgenet-project/edgenet-agent/internal/system"
 	"github.com/edgenet-project/edgenet-agent/pkg/models"
@@ -21,20 +20,19 @@ import (
 )
 
 type onboardingState struct {
-	mu       sync.RWMutex
-	code     string
-	nodeName string
-	status   string
-	srv      *http.Server
-	cancel   context.CancelFunc
+	mu     sync.RWMutex
+	node   models.Node
+	status string
+	srv    *http.Server
+	cancel context.CancelFunc
 }
 
 var state = &onboardingState{}
 
 // Run handles the onboarding process
-func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *identity.Identity) error {
+func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models.Node) error {
 	state.mu.Lock()
-	state.code = id.Code
+	state.node.Code = id.Code
 	state.mu.Unlock()
 
 	systemUUID, _ := system.GetSystemUUID()
@@ -61,15 +59,27 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *identi
 			zap.String("node_name", resp.Name),
 		)
 
-		// Store status locally
-		if err := saveStatus(cfg.State, resp); err != nil {
-			logger.Warn("Failed to save status locally", zap.Error(err))
+		// Change hostname if a name is provided
+		if resp.Name != "" {
+			if err := system.SetHostname(resp.Name); err != nil {
+				logger.Warn("Failed to set hostname", zap.String("hostname", resp.Name), zap.Error(err))
+			} else {
+				logger.Info("Hostname updated", zap.String("hostname", resp.Name))
+			}
 		}
 
 		state.mu.Lock()
 		state.status = resp.Status
-		state.nodeName = resp.Name
+		state.node.Name = resp.Name
+		state.node.PublicIP = resp.PublicIP
+		state.node.LocalIP = localIP
+		nodeToSave := state.node
 		state.mu.Unlock()
+
+		// Store node state locally
+		if err := saveNode(cfg.State, &nodeToSave); err != nil {
+			logger.Warn("Failed to save node state locally", zap.Error(err))
+		}
 
 		// Manage UI and Server based on status
 		updateUI(logger)
@@ -124,13 +134,13 @@ func checkin(server, ip, uuid, code string) (*models.CheckinResponse, error) {
 	return &checkinResp, nil
 }
 
-func saveStatus(path string, status *models.CheckinResponse) error {
+func saveNode(path string, node *models.Node) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 
-	data, err := json.MarshalIndent(status, "", "  ")
+	data, err := json.MarshalIndent(node, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -142,8 +152,8 @@ func updateUI(logger *zap.Logger) {
 	var message string
 	state.mu.RLock()
 	status := state.status
-	code := state.code
-	name := state.nodeName
+	code := state.node.Code
+	name := state.node.Name
 	state.mu.RUnlock()
 
 	switch status {
@@ -244,8 +254,8 @@ func (s *onboardingState) stopServerLocked(logger *zap.Logger) {
 func handleOnboarding(w http.ResponseWriter, r *http.Request) {
 	state.mu.RLock()
 	status := state.status
-	code := state.code
-	name := state.nodeName
+	code := state.node.Code
+	name := state.node.Name
 	state.mu.RUnlock()
 
 	var content string
@@ -278,7 +288,7 @@ func handleOnboarding(w http.ResponseWriter, r *http.Request) {
 // UpdateIssue is kept for backward compatibility if needed, but UI is now managed by Run
 func UpdateIssue(nodeCode string) error {
 	state.mu.Lock()
-	state.code = nodeCode
+	state.node.Code = nodeCode
 	state.status = "CHECKIN" // Default if called directly
 	state.mu.Unlock()
 	updateUI(zap.NewNop())
@@ -288,7 +298,7 @@ func UpdateIssue(nodeCode string) error {
 // StartTemporaryServer is kept for backward compatibility if needed
 func StartTemporaryServer(ctx context.Context, logger *zap.Logger, nodeCode string) {
 	state.mu.Lock()
-	state.code = nodeCode
+	state.node.Code = nodeCode
 	state.status = "CHECKIN"
 	state.mu.Unlock()
 	manageServer(ctx, logger)

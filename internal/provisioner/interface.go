@@ -9,7 +9,7 @@ import (
 // Provisioner defines the interface for cluster/service setup backends
 type Provisioner interface {
 	Name() string
-	Provision(ctx context.Context, info models.ProvisionInfo) error
+	Provision(ctx context.Context, node models.Node) error
 	Deprovision(ctx context.Context) error
 	IsProvisioned(ctx context.Context) (bool, error)
 }

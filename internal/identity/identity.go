@@ -8,15 +8,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/edgenet-project/edgenet-agent/pkg/models"
 )
 
-// Identity represents the node's stable identity
-type Identity struct {
-	Code string `json:"code"`
-}
-
 // LoadOrCreate loads the identity from disk or generates a new one if it doesn't exist
-func LoadOrCreate(path string) (*Identity, error) {
+func LoadOrCreate(path string) (*models.Node, error) {
 	if _, err := os.Stat(path); err == nil {
 		return load(path)
 	} else if !os.IsNotExist(err) {
@@ -36,14 +33,14 @@ func LoadOrCreate(path string) (*Identity, error) {
 	return id, nil
 }
 
-func load(path string) (*Identity, error) {
+func load(path string) (*models.Node, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	var id Identity
+	var id models.Node
 	if err := json.NewDecoder(f).Decode(&id); err != nil {
 		return nil, err
 	}
@@ -51,7 +48,7 @@ func load(path string) (*Identity, error) {
 	return &id, nil
 }
 
-func save(path string, id *Identity) error {
+func save(path string, id *models.Node) error {
 	// Ensure directory exists
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -67,7 +64,7 @@ func save(path string, id *Identity) error {
 	return os.WriteFile(path, data, 0600)
 }
 
-func generate() (*Identity, error) {
+func generate() (*models.Node, error) {
 	// Generate random node code (6 characters, uppercase hex-like or simple random)
 	// Using 3 bytes -> 6 hex chars
 	codeBytes := make([]byte, 3)
@@ -76,7 +73,7 @@ func generate() (*Identity, error) {
 	}
 	nodeCode := hex.EncodeToString(codeBytes)
 
-	return &Identity{
+	return &models.Node{
 		Code: nodeCode,
 	}, nil
 }

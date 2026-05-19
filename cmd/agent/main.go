@@ -78,7 +78,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	/**
 	 * 3. Onboarding
-	 * Performs checkin with the server, updates notifications,
+	 * Performs checkin with the server, ,
 	 * and waits until the node is ENABLED.
 	 */
 	logger.Info("Starting onboarding process...")
@@ -87,6 +87,10 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	logger.Info("Onboarding completed successfully")
+
+	/**
+	 * 4. Networking: hostname, wiregard configuration
+	 */
 
 	// TODO: Initialize other components
 
