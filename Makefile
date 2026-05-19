@@ -34,4 +34,4 @@ clean:
 
 .PHONY: sync
 sync:
-	rsync --update --delete -rv . 10.0.10.139:node-agent/
+	rsync --update --delete --exclude=.git -rv . 10.0.10.139:node-agent/

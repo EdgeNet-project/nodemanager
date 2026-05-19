@@ -61,10 +61,13 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 
 		// Change hostname if a name is provided
 		if resp.Name != "" {
-			if err := system.SetHostname(resp.Name); err != nil {
-				logger.Warn("Failed to set hostname", zap.String("hostname", resp.Name), zap.Error(err))
-			} else {
-				logger.Info("Hostname updated", zap.String("hostname", resp.Name))
+			currentHostname, err := os.Hostname()
+			if err != nil || currentHostname != resp.Name {
+				if err := system.SetHostname(resp.Name); err != nil {
+					logger.Warn("Failed to set hostname", zap.String("hostname", resp.Name), zap.Error(err))
+				} else {
+					logger.Info("Hostname updated", zap.String("hostname", resp.Name))
+				}
 			}
 		}
 

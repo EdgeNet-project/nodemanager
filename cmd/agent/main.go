@@ -6,6 +6,7 @@ import (
 
 	"github.com/edgenet-project/edgenet-agent/internal/config"
 	"github.com/edgenet-project/edgenet-agent/internal/identity"
+	"github.com/edgenet-project/edgenet-agent/internal/network"
 	"github.com/edgenet-project/edgenet-agent/internal/onboarding"
 	"github.com/edgenet-project/edgenet-agent/internal/preflight"
 	"github.com/spf13/cobra"
@@ -78,7 +79,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	/**
 	 * 3. Onboarding
-	 * Performs checkin with the server, ,
+	 * Performs checkin with the server, change hostname
 	 * and waits until the node is ENABLED.
 	 */
 	logger.Info("Starting onboarding process...")
@@ -89,8 +90,13 @@ func run(cmd *cobra.Command, args []string) {
 	logger.Info("Onboarding completed successfully")
 
 	/**
-	 * 4. Networking: hostname, wiregard configuration
+	 * 4. Networking: wiregard configuration
 	 */
+	logger.Info("Starting WireGuard configuration...")
+	if err := network.SetupWireguard(cmd.Context(), logger, cfg, id); err != nil {
+		logger.Fatal("WireGuard setup failed", zap.Error(err))
+	}
+	logger.Info("WireGuard setup completed successfully")
 
 	// TODO: Initialize other components
 

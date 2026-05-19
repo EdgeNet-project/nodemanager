@@ -17,6 +17,8 @@ type Wiregard struct {
 	Address     string `json:"address"`
 	AllowedIPs  string `json:"allowed_ips"`
 	MTU         int    `json:"mtu"`
+	PrivateKey  string `json:"private_key"`
+	PublicKey   string `json:"public_key"`
 }
 
 // CheckinRequest represents the parameters for the checkin API
@@ -32,4 +34,11 @@ type CheckinResponse struct {
 	PublicIP string          `json:"public_ip"`
 	Status   string          `json:"status"`
 	Location json.RawMessage `json:"location"`
+}
+
+// ActivateRequest represents the parameters for the activate API
+type ActivateRequest struct {
+	SystemUUID string `json:"uuid"`
+	Code       string `json:"code"`
+	PublicKey  string `json:"public_key"`
 }
