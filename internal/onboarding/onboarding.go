@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -190,6 +191,15 @@ Node Name: %s
 
 	if err := os.WriteFile("/etc/issue", []byte(message), 0644); err != nil {
 		logger.Warn("Failed to update /etc/issue", zap.Error(err))
+	}
+
+	// refresh the console tty
+	cmd := exec.Command("systemctl", "restart", "getty@tty1")
+	out, err := cmd.CombinedOutput()
+
+	if err != nil {
+		fmt.Printf("error: %v\n%s\n", err, out)
+		return
 	}
 }
 
