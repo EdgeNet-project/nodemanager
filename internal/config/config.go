@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-// Config holds the agent configuration
+// Config holds the nodemanager configuration
 type Config struct {
 	Server   string `mapstructure:"server"`
 	Identity string `mapstructure:"identity"`
@@ -41,7 +41,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	var cfg Config
-	if err := v.UnmarshalKey("agent", &cfg); err != nil {
+	if err := v.UnmarshalKey("nodemanager", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 

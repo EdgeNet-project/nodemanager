@@ -6,6 +6,7 @@ import "encoding/json"
 type Node struct {
 	Name     string `json:"name"`
 	Code     string `json:"code"`
+	Enabled  bool   `json:"enabled"`
 	PublicIP string `json:"public_ip"`
 	LocalIP  string `json:"local_ip"`
 }
@@ -33,6 +34,7 @@ type CheckinResponse struct {
 	Name     string          `json:"name"`
 	PublicIP string          `json:"public_ip"`
 	Status   string          `json:"status"`
+	Enabled  bool            `json:"enabled"`
 	Location json.RawMessage `json:"location"`
 }
 

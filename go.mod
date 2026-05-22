@@ -1,4 +1,4 @@
-module github.com/edgenet-project/edgenet-agent
+module edge-net.org/nodemanager
 
 go 1.24.0
 

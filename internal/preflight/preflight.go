@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/edgenet-project/edgenet-agent/internal/network"
+	"edge-net.org/nodemanager/internal/network"
 	"go.uber.org/zap"
 	"golang.zx2c4.com/wireguard/wgctrl"
 )
@@ -137,7 +137,7 @@ func checkWireGuard() bool {
 		// On non-linux systems wgctrl might behave differently
 		if runtime.GOOS != "linux" {
 			// For now, if not linux, we might just return false or a different check
-			// But the agent is likely targeting Linux
+			// But the nodemanager is likely targeting Linux
 			return false
 		}
 		return false

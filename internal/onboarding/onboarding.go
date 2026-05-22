@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/edgenet-project/edgenet-agent/internal/config"
-	"github.com/edgenet-project/edgenet-agent/internal/network"
-	"github.com/edgenet-project/edgenet-agent/internal/system"
-	"github.com/edgenet-project/edgenet-agent/pkg/models"
+	"edge-net.org/nodemanager/internal/config"
+	"edge-net.org/nodemanager/internal/network"
+	"edge-net.org/nodemanager/internal/system"
+	"edge-net.org/nodemanager/pkg/models"
 	"go.uber.org/zap"
 )
 
@@ -56,8 +56,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 		}
 
 		logger.Info("Checkin successful",
-			zap.String("status", resp.Status),
-			zap.String("node_name", resp.Name),
+			zap.Any("response", resp),
 		)
 
 		// Change hostname if a name is provided
@@ -74,6 +73,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 
 		state.mu.Lock()
 		state.status = resp.Status
+		state.node.Enabled = resp.Enabled
 		state.node.Name = resp.Name
 		state.node.PublicIP = resp.PublicIP
 		state.node.LocalIP = localIP
@@ -90,10 +90,10 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 		manageServer(ctx, logger)
 
 		state.mu.RLock()
-		currentStatus := state.status
+		currentStatus := state.node.Enabled
 		state.mu.RUnlock()
 
-		if currentStatus == "ENABLED" {
+		if currentStatus {
 			logger.Info("Node is ENABLED. Onboarding completed.")
 			return nil
 		}

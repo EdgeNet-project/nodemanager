@@ -8,10 +8,10 @@ import (
 
 func TestLoad(t *testing.T) {
 	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "agent.conf")
+	configPath := filepath.Join(tempDir, "nodemanager.conf")
 
 	// 1. Test missing server field
-	configContent := `[agent]
+	configContent := `[nodemanager]
 identity = /etc/edgenet/identity.json
 `
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
@@ -24,7 +24,7 @@ identity = /etc/edgenet/identity.json
 	}
 
 	// 2. Test successful load
-	configContent = `[agent]
+	configContent = `[nodemanager]
 server = https://n.planetlab.io
 identity = /etc/edgenet/identity.json
 state = /var/lib/edgenet/state.json

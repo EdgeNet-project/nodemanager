@@ -1,10 +1,10 @@
-BINARY=edgenet-agent
+BINARY=nodemanager
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_DIR=build
 
 .PHONY: build
 build:
-	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/agent
+	go build -o $(BUILD_DIR)/$(BINARY) ./cmd/nodemanager
 
 .PHONY: test
 test:
@@ -19,7 +19,7 @@ install: build
 	install -d /usr/local/bin
 	install $(BUILD_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
 	install -d /etc/edgenet
-	install -m 644 systemd/edgenet-agent.service /etc/systemd/system/edgenet-agent.service
+	install -m 644 systemd/nodemanager.service /etc/systemd/system/nodemanager.service
 	systemctl daemon-reload
 
 .PHONY: packages
@@ -34,4 +34,4 @@ clean:
 
 .PHONY: sync
 sync:
-	rsync --update --delete --exclude=.git -rv . 10.0.10.139:node-agent/
+	rsync --update --delete --exclude=.git -rv . 10.0.10.139:nodemanager/

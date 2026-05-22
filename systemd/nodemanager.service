@@ -1,10 +1,10 @@
 [Unit]
-Description=EdgeNet Node Agent
+Description=PlanetLab Nodemanager
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/edgenet-agent --config /etc/edgenet/agent.conf
+ExecStart=/usr/local/bin/nodemanager --config /etc/edgenet/nodemanager.conf
 Restart=always
 RestartSec=5
 StandardOutput=journal

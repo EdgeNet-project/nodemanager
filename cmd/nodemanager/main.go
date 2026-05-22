@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/edgenet-project/edgenet-agent/internal/config"
-	"github.com/edgenet-project/edgenet-agent/internal/identity"
-	"github.com/edgenet-project/edgenet-agent/internal/network"
-	"github.com/edgenet-project/edgenet-agent/internal/onboarding"
-	"github.com/edgenet-project/edgenet-agent/internal/preflight"
+	"edge-net.org/nodemanager/internal/config"
+	"edge-net.org/nodemanager/internal/identity"
+	"edge-net.org/nodemanager/internal/network"
+	"edge-net.org/nodemanager/internal/onboarding"
+	"edge-net.org/nodemanager/internal/preflight"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -19,12 +19,12 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "edgenet-agent",
-		Short: "EdgeNet Node Agent",
+		Use:   "nodemanager",
+		Short: "EdgeNet node manager",
 		Run:   run,
 	}
 
-	rootCmd.PersistentFlags().StringVar(&configPath, "config", "/etc/edgenet/agent.conf", "path to config file")
+	rootCmd.PersistentFlags().StringVar(&configPath, "config", "/etc/edgenet/nodemanager.conf", "path to config file")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -41,15 +41,15 @@ func run(cmd *cobra.Command, args []string) {
 		logger.Fatal("Failed to load configuration", zap.Error(err))
 	}
 
-	logger.Info("Starting EdgeNet Node Agent",
+	logger.Info("Starting EdgeNet node manager",
 		zap.String("server", cfg.Server),
 	)
 
 	/**
 	 *	1. Load or create Node identity
-	 *	Node identity is a Code generated the first time the agent is started.
+	 *	Node identity is a Code generated the first time the nodemanager is started.
 	 *	This Code is used to identify the Node in the EdgeNet cluster and is used for authentication and authorization.
-	 *  The identity persists across agent restarts and reboots.
+	 *  The identity persists across nodemanager restarts and reboots.
 	 */
 	id, err := identity.LoadOrCreate(cfg.Identity)
 	if err != nil {
@@ -100,6 +100,6 @@ func run(cmd *cobra.Command, args []string) {
 
 	// TODO: Initialize other components
 
-	fmt.Println("EdgeNet Node Agent Skeleton")
+	fmt.Println("Nodemanager exiting")
 	os.Exit(0)
 }
