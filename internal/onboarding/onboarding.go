@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"edge-net.org/nodemanager/internal/config"
-	"edge-net.org/nodemanager/internal/network"
-	"edge-net.org/nodemanager/internal/system"
-	"edge-net.org/nodemanager/pkg/models"
+	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/network"
+	"github.com/EdgeNet-project/nodemanager/internal/system"
+	"github.com/EdgeNet-project/nodemanager/pkg/models"
 	"go.uber.org/zap"
 )
 

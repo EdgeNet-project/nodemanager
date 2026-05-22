@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"time"
 
-	"edge-net.org/nodemanager/internal/network"
+	"github.com/EdgeNet-project/nodemanager/internal/network"
 	"go.uber.org/zap"
 	"golang.zx2c4.com/wireguard/wgctrl"
 )

@@ -119,3 +119,18 @@ func Ping(host string) bool {
 	err := exec.Command("ping", "-c", "1", "-W", "1", host).Run()
 	return err == nil
 }
+
+func Nslookup(host string, port int) *net.UDPAddr {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return nil
+	}
+	if len(ips) == 0 {
+		return nil
+	}
+
+	return &net.UDPAddr{
+		IP:   ips[0], // pick first result
+		Port: port,
+	}
+}

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"edge-net.org/nodemanager/internal/config"
-	"edge-net.org/nodemanager/internal/identity"
-	"edge-net.org/nodemanager/internal/network"
-	"edge-net.org/nodemanager/internal/onboarding"
-	"edge-net.org/nodemanager/internal/preflight"
+	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/identity"
+	"github.com/EdgeNet-project/nodemanager/internal/network"
+	"github.com/EdgeNet-project/nodemanager/internal/onboarding"
+	"github.com/EdgeNet-project/nodemanager/internal/preflight"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )

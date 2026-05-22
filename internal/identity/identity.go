@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"edge-net.org/nodemanager/pkg/models"
+	"github.com/EdgeNet-project/nodemanager/pkg/models"
 )
 
 // LoadOrCreate loads the identity from disk or generates a new one if it doesn't exist

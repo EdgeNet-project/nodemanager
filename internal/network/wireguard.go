@@ -9,22 +9,23 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
-	"edge-net.org/nodemanager/internal/config"
-	"edge-net.org/nodemanager/internal/system"
-	"edge-net.org/nodemanager/pkg/models"
+	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/system"
+	"github.com/EdgeNet-project/nodemanager/pkg/models"
+	"github.com/vishvananda/netlink"
 	"go.uber.org/zap"
+	"golang.org/x/sys/unix"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-var WireguardConfigPath = "/etc/edgenet/wiregard.json"
-var DefaultInterface = "wg0"
+var WireguardConfigPath = "/etc/edgenet/wireguard.json"
+
+const DefaultInterface = "wg0"
 
 // SetupWireguard handles Phase 4: WireGuard configuration and activation
 func SetupWireguard(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models.Node) error {
@@ -144,6 +145,7 @@ func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wiregard
 	wg.Address = activateResp.Address
 	wg.AllowedIPs = activateResp.AllowedIPs
 	wg.MTU = activateResp.MTU
+	wg.PersistentKeepalive = activateResp.PersistentKeepalive
 
 	return nil
 }
@@ -163,98 +165,221 @@ func SaveWireguardConfig(wg *models.Wiregard) error {
 	return os.WriteFile(WireguardConfigPath, data, 0600)
 }
 
-// ConfigureInterface sets up the WireGuard interface
 func ConfigureInterface(logger *zap.Logger, wg *models.Wiregard) error {
-	// 1. Create interface if it doesn't exist
-	if err := exec.Command("ip", "link", "add", "dev", DefaultInterface, "type", "wireguard").Run(); err != nil {
-		// If it already exists, it's fine
-		logger.Debug("Interface might already exist", zap.Error(err))
+	const ifName = DefaultInterface
+
+	// ------------------------------------------------------------
+	// 0. OPEN NETLINK + WG CLIENT EARLY
+	// ------------------------------------------------------------
+	link, err := netlink.LinkByName(ifName)
+	if err != nil {
+		// Interface doesn't exist — create it
+		wgLink := &netlink.GenericLink{
+			LinkAttrs: netlink.LinkAttrs{Name: ifName},
+			LinkType:  "wireguard",
+		}
+		if err := netlink.LinkAdd(wgLink); err != nil {
+			return fmt.Errorf("failed to create wireguard interface: %w", err)
+		}
+		link, err = netlink.LinkByName(ifName)
+		if err != nil {
+			return fmt.Errorf("interface not found after creation: %w", err)
+		}
 	}
 
-	// 2. Set IP address
-	// Remove existing addresses first to avoid conflicts? Or just add.
-	// We'll use 'ip addr replace' if available, but 'add' is safer if we know it's ours.
-	// Actually, let's flush it or just try to add.
-	exec.Command("ip", "addr", "flush", "dev", DefaultInterface).Run()
-	if err := exec.Command("ip", "addr", "add", wg.Address, "dev", DefaultInterface).Run(); err != nil {
-		return fmt.Errorf("failed to set IP address: %w", err)
+	// ------------------------------------------------------------
+	// 1. CLEANUP PHASE (IMPORTANT)
+	// ------------------------------------------------------------
+
+	logger.Info("cleaning existing wireguard state")
+
+	// 1.1 flush IP addresses
+	addrs, err := netlink.AddrList(link, unix.AF_UNSPEC)
+	if err != nil {
+		return fmt.Errorf("list addrs: %w", err)
 	}
 
-	// 3. Set MTU and bring up
-	mtu := fmt.Sprintf("%d", wg.MTU)
-	if wg.MTU == 0 {
-		mtu = "1420"
-	}
-	if err := exec.Command("ip", "link", "set", "mtu", mtu, "up", "dev", DefaultInterface).Run(); err != nil {
-		return fmt.Errorf("failed to bring up interface: %w", err)
+	for _, addr := range addrs {
+		if err := netlink.AddrDel(link, &addr); err != nil {
+			// ignore "not found" type errors safely
+			logger.Debug("failed to delete addr", zap.Error(err))
+		}
 	}
 
-	// 4. Configure WireGuard device using wgctrl
+	// 1.2 delete all routes bound to interface
+	routes, _ := netlink.RouteList(link, unix.AF_UNSPEC)
+	for _, r := range routes {
+		_ = netlink.RouteDel(&r)
+	}
+
+	// 1.3 bring link down temporarily
+	_ = netlink.LinkSetDown(link)
+
+	// 1.4 reset WireGuard config
 	client, err := wgctrl.New()
 	if err != nil {
-		return fmt.Errorf("failed to create wgctrl client: %w", err)
+		return fmt.Errorf("wgctrl: %w", err)
 	}
 	defer client.Close()
 
-	privKey, err := wgtypes.ParseKey(wg.PrivateKey)
+	empty := wgtypes.Config{
+		ReplacePeers: true,
+		Peers:        []wgtypes.PeerConfig{},
+	}
+
+	_ = client.ConfigureDevice(ifName, empty)
+
+	// ------------------------------------------------------------
+	// 2. RECONFIGURE PHASE
+	// ------------------------------------------------------------
+
+	mtu := wg.MTU
+	if mtu == 0 {
+		mtu = 1420
+	}
+
+	if err := netlink.LinkSetMTU(link, mtu); err != nil {
+		return fmt.Errorf("mtu: %w", err)
+	}
+
+	ipNet, err := parseAddress(wg.Address)
 	if err != nil {
-		return fmt.Errorf("invalid private key: %w", err)
+		return err
+	}
+
+	_ = netlink.AddrAdd(link, &netlink.Addr{IPNet: ipNet})
+
+	if err := netlink.LinkSetUp(link); err != nil {
+		return fmt.Errorf("link up: %w", err)
+	}
+
+	// ------------------------------------------------------------
+	// 3. WG CONFIG
+	// ------------------------------------------------------------
+
+	priv, err := wgtypes.ParseKey(wg.PrivateKey)
+	if err != nil {
+		return err
 	}
 
 	peerKey, err := wgtypes.ParseKey(wg.EndpointKey)
 	if err != nil {
-		return fmt.Errorf("invalid endpoint key: %w", err)
+		return err
 	}
 
-	_, allowedIPs, err := net.ParseCIDR(wg.AllowedIPs)
+	allowed, err := parseAllowedIPs(wg.AllowedIPs)
 	if err != nil {
-		// Fallback if it's just an IP
-		ip := net.ParseIP(wg.AllowedIPs)
-		if ip != nil {
-			mask := net.CIDRMask(32, 32)
-			if ip.To4() == nil {
-				mask = net.CIDRMask(128, 128)
-			}
-			allowedIPs = &net.IPNet{IP: ip, Mask: mask}
-		} else {
-			return fmt.Errorf("invalid allowed IPs: %w", err)
-		}
+		return err
 	}
 
-	peer := wgtypes.PeerConfig{
-		PublicKey:         peerKey,
-		ReplaceAllowedIPs: true,
-		AllowedIPs:        []net.IPNet{*allowedIPs},
-		Endpoint:          &net.UDPAddr{}, // Will be set below
+	endpoint, err := resolveEndpoint(wg.Endpoint)
+	if err != nil {
+		return err
 	}
 
-	// Parse endpoint
-	host, port, err := net.SplitHostPort(wg.Endpoint)
-	if err == nil {
-		ips, err := net.LookupIP(host)
-		if err == nil && len(ips) > 0 {
-			p, _ := strconv.Atoi(port)
-			if p == 0 {
-				p = 51820
-			}
-			peer.Endpoint = &net.UDPAddr{
-				IP:   ips[0],
-				Port: p,
-			}
-		}
-	}
+	keepalive := time.Duration(wg.PersistentKeepalive) * time.Second
 
-	config := wgtypes.Config{
-		PrivateKey:   &privKey,
+	cfg := wgtypes.Config{
+		PrivateKey:   &priv,
 		ReplacePeers: true,
-		Peers:        []wgtypes.PeerConfig{peer},
+		Peers: []wgtypes.PeerConfig{
+			{
+				PublicKey:                   peerKey,
+				Endpoint:                    endpoint,
+				AllowedIPs:                  allowed,
+				ReplaceAllowedIPs:           true,
+				PersistentKeepaliveInterval: &keepalive,
+			},
+		},
 	}
 
-	if err := client.ConfigureDevice(DefaultInterface, config); err != nil {
-		return fmt.Errorf("failed to configure WireGuard device: %w", err)
+	if err := client.ConfigureDevice(ifName, cfg); err != nil {
+		return fmt.Errorf("wg config: %w", err)
+	}
+
+	// ------------------------------------------------------------
+	// 4. ROUTES
+	// ------------------------------------------------------------
+
+	if err := installRoutes(link, allowed); err != nil {
+		return fmt.Errorf("routes: %w", err)
 	}
 
 	return nil
+}
+
+func parseAddress(addr string) (*net.IPNet, error) {
+	ip, ipnet, err := net.ParseCIDR(addr)
+	if err == nil {
+		return &net.IPNet{IP: ip, Mask: ipnet.Mask}, nil
+	}
+
+	ip = net.ParseIP(addr)
+	if ip == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", addr)
+	}
+
+	if ip.To4() != nil {
+		return &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}, nil
+	}
+
+	return &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)}, nil
+}
+
+func parseAllowedIPs(input string) ([]net.IPNet, error) {
+	parts := strings.Split(input, ",")
+
+	var out []net.IPNet
+
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+
+		_, ipnet, err := net.ParseCIDR(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid CIDR: %s", p)
+		}
+
+		out = append(out, *ipnet)
+	}
+
+	return out, nil
+}
+
+func installRoutes(link netlink.Link, ips []net.IPNet) error {
+	for _, ipnet := range ips {
+
+		// skip host routes if you want (optional behavior)
+		route := netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Dst:       &ipnet,
+		}
+
+		// ignore "already exists"
+		_ = netlink.RouteAdd(&route)
+	}
+	return nil
+}
+
+func resolveEndpoint(ep string) (*net.UDPAddr, error) {
+	host, portStr, err := net.SplitHostPort(ep)
+	if err != nil {
+		return nil, err
+	}
+
+	port, err := net.LookupPort("udp", portStr)
+	if err != nil {
+		port = 51820
+	}
+
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		return nil, fmt.Errorf("dns resolution failed: %s", host)
+	}
+
+	return &net.UDPAddr{
+		IP:   ips[0],
+		Port: port,
+	}, nil
 }
 
 func verifyConnectivity(logger *zap.Logger, wg *models.Wiregard) bool {
@@ -262,15 +387,7 @@ func verifyConnectivity(logger *zap.Logger, wg *models.Wiregard) bool {
 	// We need an IP to ping. AllowedIPs usually contains the peer's tunnel IP.
 	// If multiple allowed IPs, we try the first one that looks like an IP.
 
-	peerIP := ""
-	if strings.Contains(wg.AllowedIPs, "/") {
-		ip, _, _ := net.ParseCIDR(wg.AllowedIPs)
-		if ip != nil {
-			peerIP = ip.String()
-		}
-	} else {
-		peerIP = wg.AllowedIPs
-	}
+	peerIP := "10.80.0.1"
 
 	if peerIP == "" {
 		logger.Warn("Could not determine peer IP for connectivity check")

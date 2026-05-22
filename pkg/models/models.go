@@ -13,13 +13,14 @@ type Node struct {
 
 // Wiregard represents the WireGuard configuration
 type Wiregard struct {
-	Endpoint    string `json:"endpoint"`
-	EndpointKey string `json:"endpoint_key"`
-	Address     string `json:"address"`
-	AllowedIPs  string `json:"allowed_ips"`
-	MTU         int    `json:"mtu"`
-	PrivateKey  string `json:"private_key"`
-	PublicKey   string `json:"public_key"`
+	Endpoint            string `json:"endpoint"`
+	EndpointKey         string `json:"endpoint_key"`
+	Address             string `json:"address"`
+	AllowedIPs          string `json:"allowed_ips"`
+	MTU                 int    `json:"mtu"`
+	PersistentKeepalive int    `json:"persistent_keepalive"`
+	PrivateKey          string `json:"private_key"`
+	PublicKey           string `json:"public_key"`
 }
 
 // CheckinRequest represents the parameters for the checkin API

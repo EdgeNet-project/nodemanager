@@ -3,7 +3,7 @@ package provisioner
 import (
 	"context"
 
-	"github.com/edgenet-project/edgenet-agent/pkg/models"
+	"github.com/EdgeNet-project/nodemanager/pkg/models"
 )
 
 // Provisioner defines the interface for cluster/service setup backends
