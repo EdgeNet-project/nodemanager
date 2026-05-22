@@ -207,9 +207,7 @@ func manageServer(ctx context.Context, logger *zap.Logger) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 
-	shouldRun := state.status == "CHECKIN" || state.status == "REGISTERED"
-
-	if shouldRun && state.srv == nil {
+	if state.srv == nil {
 		// Start server
 		mux := http.NewServeMux()
 		mux.HandleFunc("/", handleOnboarding)
@@ -237,7 +235,7 @@ func manageServer(ctx context.Context, logger *zap.Logger) {
 			case <-serverCtx.Done():
 			}
 		}()
-	} else if !shouldRun && state.srv != nil {
+	} else if state.srv != nil {
 		// Stop server
 		state.stopServerLocked(logger)
 	}
