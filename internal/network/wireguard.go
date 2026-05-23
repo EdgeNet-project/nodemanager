@@ -37,6 +37,14 @@ func SetupWireguard(ctx context.Context, logger *zap.Logger, cfg *config.Config,
 		return fmt.Errorf("failed to load or generate WireGuard keys: %w", err)
 	}
 
+	// Check if already configured (idempotency)
+	if wgConfig.Address != "" && wgConfig.AllowedIPs != "" {
+		if isAlreadyConfigured(logger, wgConfig) {
+			logger.Info("WireGuard is already configured and connected, skipping setup")
+			return nil
+		}
+	}
+
 	// 2. Activation loop
 	systemUUID, _ := system.GetSystemUUID()
 	for {
@@ -387,13 +395,97 @@ func verifyConnectivity(logger *zap.Logger, wg *models.Wiregard) bool {
 	// We need an IP to ping. AllowedIPs usually contains the peer's tunnel IP.
 	// If multiple allowed IPs, we try the first one that looks like an IP.
 
-	peerIP := "10.80.0.1"
+	peerIP := ""
+	if allowed, err := parseAllowedIPs(wg.AllowedIPs); err == nil && len(allowed) > 0 {
+		peerIP = allowed[0].IP.String()
+	}
 
 	if peerIP == "" {
-		logger.Warn("Could not determine peer IP for connectivity check")
-		return false
+		peerIP = "10.80.0.1"
 	}
 
 	logger.Info("Pinging peer...", zap.String("ip", peerIP))
 	return Ping(peerIP)
+}
+
+func isAlreadyConfigured(logger *zap.Logger, wg *models.Wiregard) bool {
+	const ifName = DefaultInterface
+
+	link, err := netlink.LinkByName(ifName)
+	if err != nil {
+		return false
+	}
+
+	// 0. Check link type and status
+	if link.Type() != "wireguard" {
+		logger.Warn("Interface exists but is not a WireGuard interface", zap.String("interface", ifName), zap.String("type", link.Type()))
+		return false
+	}
+	if link.Attrs().Flags&net.FlagUp == 0 {
+		logger.Info("WireGuard interface is down")
+		return false
+	}
+
+	expectedMTU := wg.MTU
+	if expectedMTU == 0 {
+		expectedMTU = 1420
+	}
+	if link.Attrs().MTU != expectedMTU {
+		logger.Info("WireGuard MTU mismatch", zap.Int("current", link.Attrs().MTU), zap.Int("expected", expectedMTU))
+		return false
+	}
+
+	// 1. Check IP address
+	addrs, err := netlink.AddrList(link, unix.AF_UNSPEC)
+	if err != nil {
+		return false
+	}
+	expectedIPNet, err := parseAddress(wg.Address)
+	if err != nil {
+		logger.Warn("Failed to parse expected address", zap.Error(err))
+		return false
+	}
+	foundAddr := false
+	for _, addr := range addrs {
+		if addr.IPNet.String() == expectedIPNet.String() {
+			foundAddr = true
+			break
+		}
+	}
+	if !foundAddr {
+		logger.Info("WireGuard IP address mismatch or missing", zap.String("expected", expectedIPNet.String()))
+		return false
+	}
+
+	// 2. Check routes
+	allowed, err := parseAllowedIPs(wg.AllowedIPs)
+	if err != nil {
+		logger.Warn("Failed to parse allowed IPs", zap.Error(err))
+		return false
+	}
+	routes, err := netlink.RouteList(link, unix.AF_UNSPEC)
+	if err != nil {
+		return false
+	}
+	for _, expectedRoute := range allowed {
+		foundRoute := false
+		for _, r := range routes {
+			if r.Dst != nil && r.Dst.String() == expectedRoute.String() {
+				foundRoute = true
+				break
+			}
+		}
+		if !foundRoute {
+			logger.Info("WireGuard route missing", zap.String("route", expectedRoute.String()))
+			return false
+		}
+	}
+
+	// 3. Verify connectivity
+	if !verifyConnectivity(logger, wg) {
+		logger.Info("WireGuard connectivity check failed, will reconfigure")
+		return false
+	}
+
+	return true
 }
