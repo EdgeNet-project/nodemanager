@@ -1,0 +1,33 @@
+name: "nodemanager"
+arch: "amd64"
+platform: "linux"
+version: "${VERSION}"
+section: "default"
+priority: "extra"
+maintainer: "EdgeNet Project <info@edge-net.io>"
+description: "EdgeNet node manager"
+vendor: "EdgeNet"
+homepage: "https://github.com/EdgeNet-project/nodemanager"
+license: "MIT"
+contents:
+  - src: build/nodemanager
+    dst: /usr/bin/nodemanager
+  - src: scripts/nodemanager.conf
+    dst: /etc/edgenet/nodemanager.conf
+    type: "config"
+  - src: systemd/nodemanager.service
+    dst: /lib/systemd/system/nodemanager.service
+  - dst: /var/log/edgenet
+    type: "dir"
+    file_info:
+      mode: 0755
+  - dst: /etc/edgenet
+    type: "dir"
+    file_info:
+      mode: 0755
+  - dst: /var/lib/edgenet
+    type: "dir"
+    file_info:
+      mode: 0755
+scripts:
+  postinstall: scripts/postinstall.sh

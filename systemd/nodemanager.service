@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/nodemanager --config /etc/edgenet/nodemanager.conf
+ExecStart=/usr/bin/nodemanager --config /etc/edgenet/nodemanager.conf
 Restart=always
 RestartSec=5
 StandardOutput=journal
