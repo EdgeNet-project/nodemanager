@@ -19,7 +19,7 @@ const kubernetesStateFile = "/etc/edgenet/kubernetes.json"
 
 type BootstrapPayload struct {
 	Uuid           string `json:"uuid"`
-	Hostname       string `json:"hostname"`
+	Name           string `json:"name"`
 	BootstrapToken string `json:"bootstrap_token"`
 }
 
@@ -39,8 +39,8 @@ func (p *KubernetesProvisioner) retrieveBootstrapPayload(ctx context.Context, no
 	hostname, _ := os.Hostname()
 
 	payload := BootstrapPayload{
-		Uuid:     systemUUID,
-		Hostname: hostname,
+		Uuid: systemUUID,
+		Name: hostname,
 	}
 
 	// Read existing bootstrap token if present
@@ -56,7 +56,7 @@ func (p *KubernetesProvisioner) retrieveBootstrapPayload(ctx context.Context, no
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/api/node/kubernetes", p.cfg.Server)
+	url := fmt.Sprintf("%s/api/node/kubernetes/join", p.cfg.Server)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return nil, err
