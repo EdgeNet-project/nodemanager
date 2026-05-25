@@ -56,31 +56,21 @@ func GetKernelVersion() string {
 
 // GetDistroInfo returns the distribution ID and version.
 func GetDistroInfo() (string, string) {
-	data, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return "unknown", "unknown"
-	}
-
-	return parseOsRelease(string(data))
+	return GetOSReleaseValue("ID"), GetOSReleaseValue("VERSION_ID")
 }
 
-func parseOsRelease(content string) (string, string) {
-	lines := strings.Split(content, "\n")
-	var id, version string
+// GetOSReleaseValue returns the value of a key from /etc/os-release.
+func GetOSReleaseValue(key string) string {
+	data, err := os.ReadFile("/etc/os-release")
+	if err != nil {
+		return "unknown"
+	}
+
+	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
-		if strings.HasPrefix(line, "ID=") {
-			id = strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
-		} else if strings.HasPrefix(line, "VERSION_ID=") {
-			version = strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+		if strings.HasPrefix(line, key+"=") {
+			return strings.Trim(strings.TrimPrefix(line, key+"="), "\"")
 		}
 	}
-
-	if id == "" {
-		id = "unknown"
-	}
-	if version == "" {
-		version = "unknown"
-	}
-
-	return id, version
+	return "unknown"
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/EdgeNet-project/nodemanager/internal/system"
 	"go.uber.org/zap"
 )
 
@@ -21,6 +22,25 @@ func (p *KubernetesProvisioner) installContainerd(ctx context.Context) error {
 		if _, err := exec.LookPath("dnf"); err == nil {
 			_ = exec.CommandContext(ctx, "dnf", "install", "-y", "containerd").Run()
 		} else if _, err := exec.LookPath("apt-get"); err == nil {
+			_ = exec.CommandContext(ctx, "apt-get", "update").Run()
+			_ = exec.CommandContext(ctx, "apt-get", "install", "-y", "ca-certificates", "curl", "gnupg").Run()
+
+			_ = os.MkdirAll("/etc/apt/keyrings", 0755)
+
+			gpgKeyPath := "/etc/apt/keyrings/docker.gpg"
+			_ = os.Remove(gpgKeyPath) // Remove if exists to avoid gpg prompt
+
+			gpgCmd := "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o " + gpgKeyPath
+			_ = exec.CommandContext(ctx, "bash", "-c", gpgCmd).Run()
+			_ = os.Chmod(gpgKeyPath, 0644)
+
+			archOut, _ := exec.CommandContext(ctx, "dpkg", "--print-architecture").Output()
+			arch := strings.TrimSpace(string(archOut))
+			codename := system.GetOSReleaseValue("VERSION_CODENAME")
+
+			repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/ubuntu %s stable\n", arch, gpgKeyPath, codename)
+			_ = os.WriteFile("/etc/apt/sources.list.d/docker.list", []byte(repoLine), 0644)
+
 			_ = exec.CommandContext(ctx, "apt-get", "update").Run()
 			_ = exec.CommandContext(ctx, "apt-get", "install", "-y", "containerd.io").Run()
 		}
