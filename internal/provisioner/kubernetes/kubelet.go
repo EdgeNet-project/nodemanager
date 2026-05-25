@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -29,13 +30,16 @@ authorization:
   mode: Webhook
 cgroupDriver: systemd
 clusterDNS:
-  - "%s"
+  - %s
 clusterDomain: cluster.local
 rotateCertificates: true
 serverTLSBootstrap: true
-address: %s
-nodeIP: %s
-`, bootstrap.ClusterDNS, bootstrap.NodeIP, bootstrap.NodeIP)
+eventRecordQPS: 0
+maxPods: 110
+podPidsLimit: 4096
+protectKernelDefaults: true
+readOnlyPort: 0
+`, bootstrap.ClusterDNS)
 
 	return os.WriteFile("/var/lib/kubelet/config.yaml", []byte(config), 0644)
 }
@@ -66,18 +70,38 @@ current-context: bootstrap
 	return os.WriteFile("/etc/kubernetes/bootstrap-kubelet.conf", []byte(kubeconfig), 0600)
 }
 
-func (p *KubernetesProvisioner) configureKubeletService(ctx context.Context) error {
+func (p *KubernetesProvisioner) writeKubernetesPKI(bootstrap *BootstrapResponse) error {
+	// create the directory
+	if err := os.MkdirAll("/etc/kubernetes/pki", 0755); err != nil {
+		return fmt.Errorf("failed to create pki dir: %w", err)
+	}
+
+	// decode the CA cert (assuming it comes as base64 from your orchestrator)
+	caCert, err := base64.StdEncoding.DecodeString(bootstrap.CACert)
+	if err != nil {
+		return fmt.Errorf("failed to decode CA cert: %w", err)
+	}
+
+	if err := os.WriteFile("/etc/kubernetes/pki/ca.crt", caCert, 0644); err != nil {
+		return fmt.Errorf("failed to write CA cert: %w", err)
+	}
+
+	return nil
+}
+
+func (p *KubernetesProvisioner) configureKubeletService(ctx context.Context, bootstrap *BootstrapResponse) error {
 	p.logger.Info("Configuring kubelet service")
 	_ = os.MkdirAll("/etc/systemd/system/kubelet.service.d", 0755)
 
-	override := `[Service]
+	override := fmt.Sprintf(`[Service]
 ExecStart=
 ExecStart=/usr/bin/kubelet \
   --bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf \
   --kubeconfig=/etc/kubernetes/kubelet.conf \
-  --config=/var/lib/kubelet/config.yaml
-`
-	if err := os.WriteFile("/etc/systemd/system/kubelet.service.d/10-node-agent.conf", []byte(override), 0644); err != nil {
+  --config=/var/lib/kubelet/config.yaml \
+  --node-ip=%s
+`, bootstrap.NodeIP)
+	if err := os.WriteFile("/etc/systemd/system/kubelet.service.d/10-nodemanager.conf", []byte(override), 0644); err != nil {
 		return err
 	}
 
