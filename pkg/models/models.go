@@ -60,3 +60,9 @@ type PingResponse struct {
 	Enabled bool   `json:"enabled"`
 	Status  string `json:"status"`
 }
+
+// ReadyRequest represents the parameters for the kubernetes ready API
+type ReadyRequest struct {
+	SystemUUID string `json:"uuid"`
+	Name       string `json:"name"`
+}

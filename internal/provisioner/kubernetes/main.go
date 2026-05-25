@@ -99,6 +99,11 @@ func (p *KubernetesProvisioner) Provision(ctx context.Context, node models.Node)
 		return fmt.Errorf("failed to wait for node readiness: %w", err)
 	}
 
+	// 11. Notify Orchestrator
+	if err := p.notifyNodeReady(ctx, node); err != nil {
+		return fmt.Errorf("failed to notify node readiness: %w", err)
+	}
+
 	p.logger.Info("Kubernetes provisioning completed successfully")
 	return nil
 }
@@ -112,7 +117,7 @@ func (p *KubernetesProvisioner) Deprovision(ctx context.Context) error {
 	// Remove files
 	_ = os.RemoveAll("/etc/kubernetes")
 	_ = os.RemoveAll("/var/lib/kubelet")
-	_ = os.Remove("/etc/systemd/system/kubelet.service.d/10-node-agent.conf")
+	_ = os.Remove("/etc/systemd/system/kubelet.service.d/10-nodemanager.conf")
 	_ = exec.CommandContext(ctx, "systemctl", "daemon-reload").Run()
 
 	return nil
