@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/EdgeNet-project/nodemanager/internal/system/packages"
 	"go.uber.org/zap"
 )
 
@@ -34,8 +35,31 @@ enabled=1
 gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/v%s/rpm/repodata/repomd.xml.key
 `, version, version)
-	if err := os.WriteFile("/etc/yum.repos.d/kubernetes.repo", []byte(repo), 0644); err != nil {
-		return fmt.Errorf("failed to write kubernetes.repo: %w", err)
+
+	repoPath := "/etc/yum.repos.d/kubernetes.repo"
+	existingRepo, err := os.ReadFile(repoPath)
+	if err == nil && string(existingRepo) == repo {
+		p.logger.Info("Kubernetes repo already configured correctly")
+	} else {
+		if err := os.WriteFile(repoPath, []byte(repo), 0644); err != nil {
+			return fmt.Errorf("failed to write kubernetes.repo: %w", err)
+		}
+	}
+
+	// Check if packages are already installed and match version
+	pkgs := []string{"kubelet", "kubectl", "cri-tools"}
+	allCorrect := true
+	for _, pkg := range pkgs {
+		v, err := packages.GetVersion(ctx, pkg)
+		if err != nil || !strings.HasPrefix(v, version) {
+			allCorrect = false
+			break
+		}
+	}
+
+	if allCorrect {
+		p.logger.Info("Kubernetes packages already installed and match version")
+		return nil
 	}
 
 	if err := exec.CommandContext(ctx, "dnf", "install", "-y", "kubelet", "kubectl", "cri-tools").Run(); err != nil {
@@ -48,25 +72,52 @@ func (p *KubernetesProvisioner) installKubernetesComponentsApt(ctx context.Conte
 	version := p.cfg.KubernetesVersion
 	p.logger.Info("Installing Kubernetes components using apt", zap.String("version", version))
 
-	_ = exec.CommandContext(ctx, "apt-get", "update").Run()
-	_ = exec.CommandContext(ctx, "apt-get", "install", "-y", "apt-transport-https", "ca-certificates", "curl", "gnupg").Run()
-
-	_ = os.MkdirAll("/etc/apt/keyrings", 0755)
 	gpgKeyPath := "/etc/apt/keyrings/kubernetes-apt-keyring.gpg"
-	_ = os.Remove(gpgKeyPath)
-
-	gpgCmd := fmt.Sprintf("curl -fsSL https://pkgs.k8s.io/core:/stable:/v%s/deb/Release.key | gpg --dearmor -o %s", version, gpgKeyPath)
-	if err := exec.CommandContext(ctx, "bash", "-c", gpgCmd).Run(); err != nil {
-		return fmt.Errorf("failed to download kubernetes gpg key: %w", err)
-	}
-	_ = os.Chmod(gpgKeyPath, 0644)
-
+	repoPath := "/etc/apt/sources.list.d/kubernetes.list"
 	repoLine := fmt.Sprintf("deb [signed-by=%s] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n", gpgKeyPath, version)
-	if err := os.WriteFile("/etc/apt/sources.list.d/kubernetes.list", []byte(repoLine), 0644); err != nil {
-		return fmt.Errorf("failed to write kubernetes.list: %w", err)
+
+	repoCorrect := false
+	if data, err := os.ReadFile(repoPath); err == nil && string(data) == repoLine {
+		if _, err := os.Stat(gpgKeyPath); err == nil {
+			repoCorrect = true
+		}
 	}
 
-	_ = exec.CommandContext(ctx, "apt-get", "update").Run()
+	if !repoCorrect {
+		_ = exec.CommandContext(ctx, "apt-get", "update").Run()
+		_ = exec.CommandContext(ctx, "apt-get", "install", "-y", "apt-transport-https", "ca-certificates", "curl", "gnupg").Run()
+
+		_ = os.MkdirAll("/etc/apt/keyrings", 0755)
+		_ = os.Remove(gpgKeyPath)
+
+		gpgCmd := fmt.Sprintf("curl -fsSL https://pkgs.k8s.io/core:/stable:/v%s/deb/Release.key | gpg --dearmor -o %s", version, gpgKeyPath)
+		if err := exec.CommandContext(ctx, "bash", "-c", gpgCmd).Run(); err != nil {
+			return fmt.Errorf("failed to download kubernetes gpg key: %w", err)
+		}
+		_ = os.Chmod(gpgKeyPath, 0644)
+
+		if err := os.WriteFile(repoPath, []byte(repoLine), 0644); err != nil {
+			return fmt.Errorf("failed to write kubernetes.list: %w", err)
+		}
+		_ = exec.CommandContext(ctx, "apt-get", "update").Run()
+	}
+
+	// Check if packages are already installed and match version
+	pkgs := []string{"kubelet", "kubectl", "cri-tools"}
+	allCorrect := true
+	for _, pkg := range pkgs {
+		v, err := packages.GetVersion(ctx, pkg)
+		if err != nil || !strings.HasPrefix(v, version) {
+			allCorrect = false
+			break
+		}
+	}
+
+	if allCorrect {
+		p.logger.Info("Kubernetes packages already installed and match version")
+		return nil
+	}
+
 	if err := exec.CommandContext(ctx, "apt-get", "install", "-y", "kubelet", "kubectl", "cri-tools").Run(); err != nil {
 		return fmt.Errorf("failed to install kubernetes components via apt: %w", err)
 	}
@@ -97,5 +148,11 @@ func (p *KubernetesProvisioner) configureAPIServerConnectivity() error {
 		lines = append(lines, hostLine)
 	}
 
-	return os.WriteFile("/etc/hosts", []byte(strings.Join(lines, "\n")), 0644)
+	newContent := strings.Join(lines, "\n")
+	if string(content) == newContent {
+		p.logger.Info("API server connectivity already configured in /etc/hosts")
+		return nil
+	}
+
+	return os.WriteFile("/etc/hosts", []byte(newContent), 0644)
 }
