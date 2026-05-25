@@ -3,24 +3,27 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"strings"
+	"sort"
 
+	"github.com/EdgeNet-project/nodemanager/internal/system/modules"
+	"github.com/EdgeNet-project/nodemanager/internal/system/swap"
+	"github.com/EdgeNet-project/nodemanager/internal/system/sysctl"
 	"go.uber.org/zap"
 )
 
 func (p *KubernetesProvisioner) prepareOS(ctx context.Context) error {
 	p.logger.Info("Preparing OS for Kubernetes")
 
-	// Load kernel modules
-	modules := []string{"overlay", "br_netfilter"}
-	for _, mod := range modules {
-		if err := exec.CommandContext(ctx, "modprobe", mod).Run(); err != nil {
+	// Load and persist kernel modules
+	kernelModules := []string{"overlay", "br_netfilter"}
+	for _, mod := range kernelModules {
+		p.logger.Info("Ensuring kernel module", zap.String("module", mod))
+		if err := modules.Load(ctx, mod); err != nil {
 			return fmt.Errorf("failed to load kernel module %s: %w", mod, err)
 		}
-		// Persist modules
-		_ = os.WriteFile(fmt.Sprintf("/etc/modules-load.d/%s.conf", mod), []byte(mod), 0644)
+		if err := modules.Persist(mod); err != nil {
+			p.logger.Warn("Failed to persist kernel module", zap.String("module", mod), zap.Error(err))
+		}
 	}
 
 	// Sysctl
@@ -28,36 +31,45 @@ func (p *KubernetesProvisioner) prepareOS(ctx context.Context) error {
 		"net.bridge.bridge-nf-call-iptables":  "1",
 		"net.ipv4.ip_forward":                 "1",
 		"net.bridge.bridge-nf-call-ip6tables": "1",
+
+		"vm.overcommit_memory": "1",
+		"kernel.panic":         "10",
+		"kernel.panic_on_oops": "1",
 	}
-	for k, v := range sysctls {
-		if err := exec.CommandContext(ctx, "sysctl", "-w", fmt.Sprintf("%s=%s", k, v)).Run(); err != nil {
+
+	keys := make([]string, 0, len(sysctls))
+	for k := range sysctls {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := sysctls[k]
+		p.logger.Info("Ensuring sysctl", zap.String("key", k), zap.String("value", v))
+		if err := sysctl.Set(ctx, k, v); err != nil {
 			return fmt.Errorf("failed to set sysctl %s: %w", k, err)
 		}
 	}
+
 	// Persist sysctl
-	var sysctlConfig strings.Builder
-	for k, v := range sysctls {
-		sysctlConfig.WriteString(fmt.Sprintf("%s=%s\n", k, v))
-	}
-	if err := os.WriteFile("/etc/sysctl.d/99-kubernetes-cri.conf", []byte(sysctlConfig.String()), 0644); err != nil {
+	sysctlPath := "/etc/sysctl.d/99-kubernetes-cri.conf"
+	if err := sysctl.Persist(sysctlPath, sysctls); err != nil {
 		return fmt.Errorf("failed to write sysctl config: %w", err)
 	}
 
 	// Disable swap
-	if err := exec.CommandContext(ctx, "swapoff", "-a").Run(); err != nil {
-		p.logger.Warn("Failed to disable swap", zap.Error(err))
-	}
-	// Remove from fstab
-	fstab, err := os.ReadFile("/etc/fstab")
-	if err == nil {
-		lines := strings.Split(string(fstab), "\n")
-		var newLines []string
-		for _, line := range lines {
-			if !strings.Contains(line, "swap") {
-				newLines = append(newLines, line)
-			}
+	if swap.IsEnabled() {
+		p.logger.Info("Disabling swap")
+		if err := swap.Disable(ctx); err != nil {
+			p.logger.Warn("Failed to disable swap", zap.Error(err))
 		}
-		_ = os.WriteFile("/etc/fstab", []byte(strings.Join(newLines, "\n")), 0644)
+	}
+
+	// Remove from fstab
+	if err := swap.RemoveFromFstab(); err != nil {
+		p.logger.Warn("Failed to remove swap from /etc/fstab", zap.Error(err))
+	} else {
+		p.logger.Info("Swap entries removed from /etc/fstab (if any)")
 	}
 
 	return nil
