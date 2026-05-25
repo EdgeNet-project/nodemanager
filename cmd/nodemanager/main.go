@@ -9,6 +9,7 @@ import (
 	"github.com/EdgeNet-project/nodemanager/internal/network"
 	"github.com/EdgeNet-project/nodemanager/internal/onboarding"
 	"github.com/EdgeNet-project/nodemanager/internal/preflight"
+	"github.com/EdgeNet-project/nodemanager/internal/provisioner/kubernetes"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -97,9 +98,26 @@ func run(cmd *cobra.Command, args []string) {
 		logger.Fatal("WireGuard setup failed", zap.Error(err))
 	}
 	logger.Info("WireGuard setup completed successfully")
+	
+	/**
+	 * 5. Provisioning: kubernetes configuration
+	 */
+	logger.Info("Starting Kubernetes provisioning phase...")
+	prov := kubernetes.New(logger, cfg)
+	
+	isProv, err := prov.IsProvisioned(cmd.Context())
+	if err == nil && isProv {
+		logger.Info("Kubernetes is already provisioned, skipping.")
+	} else {
+		if err := prov.Provision(cmd.Context(), *id); err != nil {
+			logger.Error("Kubernetes provisioning failed", zap.Error(err))
+			// We don't necessarily want to exit here if we want the agent to keep running
+			// but for now, let's follow the existing pattern of fatal errors for setup.
+			os.Exit(1)
+		}
+		logger.Info("Kubernetes provisioning completed successfully")
+	}
 
-	// TODO: Initialize other components
-
-	fmt.Println("Nodemanager exiting")
-	os.Exit(0)
+	fmt.Println("Nodemanager running, press Ctrl+C to exit")
+	<-cmd.Context().Done()
 }
