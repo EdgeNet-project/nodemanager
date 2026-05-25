@@ -11,8 +11,8 @@ type Node struct {
 	LocalIP  string `json:"local_ip"`
 }
 
-// Wiregard represents the WireGuard configuration
-type Wiregard struct {
+// Wireguard represents the WireGuard configuration
+type Wireguard struct {
 	Endpoint            string `json:"endpoint"`
 	EndpointKey         string `json:"endpoint_key"`
 	Address             string `json:"address"`

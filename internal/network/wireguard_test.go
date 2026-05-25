@@ -10,7 +10,7 @@ import (
 func TestLoadOrGenerateKeys(t *testing.T) {
 	tempDir := t.TempDir()
 	oldPath := WireguardConfigPath
-	WireguardConfigPath = filepath.Join(tempDir, "wiregard.json")
+	WireguardConfigPath = filepath.Join(tempDir, "wireguard.json")
 	defer func() { WireguardConfigPath = oldPath }()
 
 	logger := zap.NewNop()

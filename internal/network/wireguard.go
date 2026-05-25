@@ -37,51 +37,46 @@ func SetupWireguard(ctx context.Context, logger *zap.Logger, cfg *config.Config,
 		return fmt.Errorf("failed to load or generate WireGuard keys: %w", err)
 	}
 
-	// Check if already configured (idempotency)
-	if wgConfig.Address != "" && wgConfig.AllowedIPs != "" {
-		if isAlreadyConfigured(logger, wgConfig) {
-			logger.Info("WireGuard is already configured and connected, skipping setup")
-			return nil
-		}
-	}
-
-	// 2. Activation loop
 	systemUUID, _ := system.GetSystemUUID()
+
+	// Setup loop
 	for {
-		err := activate(logger, cfg.Server, systemUUID, id.Code, wgConfig)
-		if err == nil {
-			logger.Info("WireGuard activation successful")
-			break
-		}
-
-		logger.Warn("WireGuard activation failed, retrying in 5 minutes", zap.Error(err))
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(5 * time.Minute):
-		}
-	}
-
-	// 3. Save config
-	if err := SaveWireguardConfig(wgConfig); err != nil {
-		logger.Warn("Failed to save WireGuard configuration", zap.Error(err))
-	}
-
-	// 4. Interface configuration loop
-	for {
-		err := ConfigureInterface(logger, wgConfig)
-		if err == nil {
-			logger.Info("WireGuard interface configured successfully")
-
-			// 5. Verify connectivity (ping peer)
-			if verifyConnectivity(logger, wgConfig) {
-				logger.Info("WireGuard connectivity verified")
+		// 1. Check if already configured (idempotency)
+		if wgConfig.Address != "" && wgConfig.AllowedIPs != "" {
+			if isAlreadyConfigured(logger, wgConfig) {
+				logger.Info("WireGuard is already configured and functional")
 				return nil
 			}
-			err = fmt.Errorf("connectivity check failed")
 		}
 
-		logger.Warn("WireGuard setup or connectivity check failed, retrying in 5 minutes", zap.Error(err))
+		// 2. Activation: Get latest configuration from orchestrator
+		logger.Info("Activating WireGuard with orchestrator...")
+		err := activate(logger, cfg.Server, systemUUID, id.Code, wgConfig)
+		if err != nil {
+			logger.Warn("WireGuard activation failed, retrying in 5 minutes", zap.Error(err))
+		} else {
+			logger.Info("WireGuard activation successful")
+
+			// 3. Save config
+			if err := SaveWireguardConfig(wgConfig); err != nil {
+				logger.Warn("Failed to save WireGuard configuration", zap.Error(err))
+			}
+
+			// 4. Interface configuration
+			err = ConfigureInterface(logger, wgConfig)
+			if err == nil {
+				logger.Info("WireGuard interface configured successfully")
+
+				// 5. Verify connectivity (ping peer)
+				if verifyConnectivity(logger, wgConfig) {
+					logger.Info("WireGuard connectivity verified")
+					return nil
+				}
+				err = fmt.Errorf("connectivity check failed after configuration")
+			}
+			logger.Warn("WireGuard setup or connectivity check failed, retrying in 5 minutes", zap.Error(err))
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -91,11 +86,11 @@ func SetupWireguard(ctx context.Context, logger *zap.Logger, cfg *config.Config,
 }
 
 // LoadOrGenerateKeys loads keys from the config file or generates new ones
-func LoadOrGenerateKeys(logger *zap.Logger) (*models.Wiregard, error) {
+func LoadOrGenerateKeys(logger *zap.Logger) (*models.Wireguard, error) {
 	if _, err := os.Stat(WireguardConfigPath); err == nil {
 		data, err := os.ReadFile(WireguardConfigPath)
 		if err == nil {
-			var wg models.Wiregard
+			var wg models.Wireguard
 			if err := json.Unmarshal(data, &wg); err == nil && wg.PrivateKey != "" && wg.PublicKey != "" {
 				logger.Info("Loaded existing WireGuard keys")
 				return &wg, nil
@@ -103,19 +98,19 @@ func LoadOrGenerateKeys(logger *zap.Logger) (*models.Wiregard, error) {
 		}
 	}
 
-	logger.Info("Generating new WireGuard keys...")
+	logger.Info("Generating new Wireguard keys...")
 	priv, err := wgtypes.GeneratePrivateKey()
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.Wiregard{
+	return &models.Wireguard{
 		PrivateKey: priv.String(),
 		PublicKey:  priv.PublicKey().String(),
 	}, nil
 }
 
-func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wiregard) error {
+func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wireguard) error {
 	reqBody := models.ActivateRequest{
 		SystemUUID: uuid,
 		Code:       code,
@@ -126,7 +121,7 @@ func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wiregard
 		return err
 	}
 
-	url := fmt.Sprintf("%s/api/node/wiregard", server)
+	url := fmt.Sprintf("%s/api/node/wireguard", server)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return err
@@ -138,12 +133,19 @@ func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wiregard
 		return fmt.Errorf("server returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var activateResp models.Wiregard
+	var activateResp models.Wireguard
 	if err := json.NewDecoder(resp.Body).Decode(&activateResp); err != nil {
 		return err
 	}
 
-	logger.Info("Wiregard request successful",
+	if activateResp.EndpointKey == "" {
+		return fmt.Errorf("server response missing endpoint_key")
+	}
+	if activateResp.Address == "" {
+		return fmt.Errorf("server response missing address")
+	}
+
+	logger.Info("Wireguard request successful",
 		zap.Any("response", activateResp),
 	)
 
@@ -159,7 +161,7 @@ func activate(logger *zap.Logger, server, uuid, code string, wg *models.Wiregard
 }
 
 // SaveWireguardConfig persists the configuration to disk
-func SaveWireguardConfig(wg *models.Wiregard) error {
+func SaveWireguardConfig(wg *models.Wireguard) error {
 	dir := filepath.Dir(WireguardConfigPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -173,7 +175,7 @@ func SaveWireguardConfig(wg *models.Wiregard) error {
 	return os.WriteFile(WireguardConfigPath, data, 0600)
 }
 
-func ConfigureInterface(logger *zap.Logger, wg *models.Wiregard) error {
+func ConfigureInterface(logger *zap.Logger, wg *models.Wireguard) error {
 	const ifName = DefaultInterface
 
 	// ------------------------------------------------------------
@@ -265,14 +267,20 @@ func ConfigureInterface(logger *zap.Logger, wg *models.Wiregard) error {
 	// 3. WG CONFIG
 	// ------------------------------------------------------------
 
+	if wg.PrivateKey == "" {
+		return fmt.Errorf("missing WireGuard private key")
+	}
 	priv, err := wgtypes.ParseKey(wg.PrivateKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid WireGuard private key: %w", err)
 	}
 
+	if wg.EndpointKey == "" {
+		return fmt.Errorf("missing WireGuard endpoint key (peer public key)")
+	}
 	peerKey, err := wgtypes.ParseKey(wg.EndpointKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("invalid WireGuard endpoint key: %w", err)
 	}
 
 	allowed, err := parseAllowedIPs(wg.AllowedIPs)
@@ -390,7 +398,7 @@ func resolveEndpoint(ep string) (*net.UDPAddr, error) {
 	}, nil
 }
 
-func verifyConnectivity(logger *zap.Logger, wg *models.Wiregard) bool {
+func verifyConnectivity(logger *zap.Logger, wg *models.Wireguard) bool {
 	// Try to ping the peer.
 	// We need an IP to ping. AllowedIPs usually contains the peer's tunnel IP.
 	// If multiple allowed IPs, we try the first one that looks like an IP.
@@ -408,7 +416,7 @@ func verifyConnectivity(logger *zap.Logger, wg *models.Wiregard) bool {
 	return Ping(peerIP)
 }
 
-func isAlreadyConfigured(logger *zap.Logger, wg *models.Wiregard) bool {
+func isAlreadyConfigured(logger *zap.Logger, wg *models.Wireguard) bool {
 	const ifName = DefaultInterface
 
 	link, err := netlink.LinkByName(ifName)
