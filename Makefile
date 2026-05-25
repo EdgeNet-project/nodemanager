@@ -2,7 +2,7 @@ BINARY=nodemanager
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 PKG_VERSION=$(shell echo $(VERSION) | sed 's/^v//' | grep -E '^[0-9]' || echo 0.0.0)
 BUILD_DIR=build
-ROCKY_VERSION?=9
+ROCKY_VERSION?=10
 ROCKY_ISO?=Rocky-$(ROCKY_VERSION)-latest-x86_64-minimal.iso
 CUSTOM_ISO?=rocky-nodemanager.iso
 KS_FILE=images/rocky/ks.cfg
@@ -44,6 +44,7 @@ clean:
 .PHONY: sync
 sync:
 	rsync --update --delete --exclude=.git -rv . 10.0.10.139:nodemanager/
+	rsync --update --delete --exclude=.git -rv . 10.0.10.100:nodemanager/
 
 .PHONY: rocky-image
 rocky-image: packages

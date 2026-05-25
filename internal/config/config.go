@@ -15,7 +15,7 @@ type Config struct {
 
 	// Kubernetes specific configuration
 	KubernetesVersion string `mapstructure:"kubernetes_version"`
-	APIServerIP        string `mapstructure:"api_server_ip"`
+	APIServerIP       string `mapstructure:"api_server_ip"`
 }
 
 // Load loads the configuration from the given path
@@ -58,7 +58,7 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	if cfg.KubernetesVersion == "" {
-		cfg.KubernetesVersion = "1.31" // Defaulting to a recent version if not specified
+		cfg.KubernetesVersion = "1.30"
 	}
 
 	return &cfg, nil
