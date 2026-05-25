@@ -37,6 +37,10 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	state.mu.Unlock()
 
 	systemUUID, _ := system.GetSystemUUID()
+	arch := system.GetArch()
+	kernel := system.GetKernelVersion()
+	distro, version := system.GetDistroInfo()
+
 	localIPs, _ := network.GetLocalIPs()
 	localIP := ""
 	if len(localIPs) > 0 {
@@ -44,7 +48,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	}
 
 	for {
-		resp, err := checkin(cfg.Server, localIP, systemUUID, id.Code)
+		resp, err := checkin(cfg.Server, localIP, systemUUID, id.Code, arch, distro, version, kernel)
 		if err != nil {
 			logger.Warn("Checkin failed, retrying in 5 minutes", zap.Error(err))
 			select {
@@ -107,11 +111,15 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	}
 }
 
-func checkin(server, ip, uuid, code string) (*models.CheckinResponse, error) {
+func checkin(server, ip, uuid, code, arch, distro, version, kernel string) (*models.CheckinResponse, error) {
 	reqBody := models.CheckinRequest{
 		IP:         ip,
 		SystemUUID: uuid,
 		Code:       code,
+		Arch:       arch,
+		Distro:     distro,
+		Version:    version,
+		Kernel:     kernel,
 	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
