@@ -1,21 +1,21 @@
 package kubernetes
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/EdgeNet-project/nodemanager/pkg/models"
+	"go.uber.org/zap"
 )
 
 func (p *KubernetesProvisioner) writeKubeletConfig(bootstrap *BootstrapResponse) error {
 	p.logger.Info("Writing kubelet config")
 	_ = os.MkdirAll("/var/lib/kubelet", 0755)
-
-	// In a real scenario, we would use the YAML from bootstrap.KubeletConfig
-	// and merge/override values.
-	// For now, let's write a basic one as per requirements.
 
 	config := fmt.Sprintf(`kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
@@ -41,7 +41,13 @@ protectKernelDefaults: true
 readOnlyPort: 0
 `, bootstrap.ClusterDNS)
 
-	return os.WriteFile("/var/lib/kubelet/config.yaml", []byte(config), 0644)
+	configPath := "/var/lib/kubelet/config.yaml"
+	if current, err := os.ReadFile(configPath); err == nil && string(current) == config {
+		p.logger.Info("Kubelet config is already up to date")
+		return nil
+	}
+
+	return os.WriteFile(configPath, []byte(config), 0644)
 }
 
 func (p *KubernetesProvisioner) writeBootstrapKubeconfig(bootstrap *BootstrapResponse) error {
@@ -67,7 +73,13 @@ contexts:
 current-context: bootstrap
 `, bootstrap.CACert, bootstrap.APIServer, bootstrap.BootstrapToken)
 
-	return os.WriteFile("/etc/kubernetes/bootstrap-kubelet.conf", []byte(kubeconfig), 0600)
+	configPath := "/etc/kubernetes/bootstrap-kubelet.conf"
+	if current, err := os.ReadFile(configPath); err == nil && string(current) == kubeconfig {
+		p.logger.Info("Bootstrap kubeconfig is already up to date")
+		return nil
+	}
+
+	return os.WriteFile(configPath, []byte(kubeconfig), 0600)
 }
 
 func (p *KubernetesProvisioner) writeKubernetesPKI(bootstrap *BootstrapResponse) error {
@@ -82,7 +94,13 @@ func (p *KubernetesProvisioner) writeKubernetesPKI(bootstrap *BootstrapResponse)
 		return fmt.Errorf("failed to decode CA cert: %w", err)
 	}
 
-	if err := os.WriteFile("/etc/kubernetes/pki/ca.crt", caCert, 0644); err != nil {
+	certPath := "/etc/kubernetes/pki/ca.crt"
+	if current, err := os.ReadFile(certPath); err == nil && bytes.Equal(current, caCert) {
+		p.logger.Info("CA certificate is already up to date")
+		return nil
+	}
+
+	if err := os.WriteFile(certPath, caCert, 0644); err != nil {
 		return fmt.Errorf("failed to write CA cert: %w", err)
 	}
 
@@ -101,13 +119,31 @@ ExecStart=/usr/bin/kubelet \
   --config=/var/lib/kubelet/config.yaml \
   --node-ip=%s
 `, bootstrap.NodeIP)
-	if err := os.WriteFile("/etc/systemd/system/kubelet.service.d/10-nodemanager.conf", []byte(override), 0644); err != nil {
-		return err
+
+	overridePath := "/etc/systemd/system/kubelet.service.d/10-nodemanager.conf"
+	changed := false
+	if current, err := os.ReadFile(overridePath); err != nil || string(current) != override {
+		if err := os.WriteFile(overridePath, []byte(override), 0644); err != nil {
+			return err
+		}
+		changed = true
 	}
 
-	_ = exec.CommandContext(ctx, "systemctl", "daemon-reload").Run()
+	if changed {
+		_ = exec.CommandContext(ctx, "systemctl", "daemon-reload").Run()
+	}
+
 	_ = exec.CommandContext(ctx, "systemctl", "enable", "kubelet").Run()
-	return exec.CommandContext(ctx, "systemctl", "restart", "kubelet").Run()
+
+	isActive := exec.CommandContext(ctx, "systemctl", "is-active", "kubelet").Run() == nil
+
+	if changed || !isActive {
+		p.logger.Info("Restarting kubelet service")
+		return exec.CommandContext(ctx, "systemctl", "restart", "kubelet").Run()
+	}
+
+	p.logger.Info("Kubelet service is already correctly configured and running")
+	return nil
 }
 
 func (p *KubernetesProvisioner) waitForTLSBootstrap(ctx context.Context) error {
@@ -131,10 +167,14 @@ func (p *KubernetesProvisioner) waitForTLSBootstrap(ctx context.Context) error {
 	}
 }
 
-func (p *KubernetesProvisioner) waitForNodeReadiness(ctx context.Context) error {
+func (p *KubernetesProvisioner) waitForNodeReadiness(ctx context.Context, node models.Node) error {
 	p.logger.Info("Waiting for node to become ready")
-	// In a real scenario, we'd use kubectl or k8s client to check node status.
-	// For now, let's just check if kubelet is running.
+
+	nodeName := node.Name
+	if nodeName == "" {
+		nodeName, _ = os.Hostname()
+	}
+
 	timeout := time.After(5 * time.Minute)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -146,10 +186,47 @@ func (p *KubernetesProvisioner) waitForNodeReadiness(ctx context.Context) error 
 		case <-timeout:
 			return fmt.Errorf("timed out waiting for node readiness")
 		case <-ticker.C:
-			cmd := exec.CommandContext(ctx, "systemctl", "is-active", "kubelet")
-			if err := cmd.Run(); err == nil {
-				return nil
+			// 1. Check if kubelet service is running
+			if err := exec.CommandContext(ctx, "systemctl", "is-active", "kubelet").Run(); err != nil {
+				p.logger.Debug("Kubelet service is not active yet")
+				continue
 			}
+
+			// 2. Check container runtime health
+			if err := exec.CommandContext(ctx, "crictl", "info").Run(); err != nil {
+				p.logger.Debug("Container runtime is not healthy yet")
+				continue
+			}
+
+			// 3. Check node registration and identity
+			kubeconfig := "/etc/kubernetes/kubelet.conf"
+			if _, err := os.Stat(kubeconfig); err != nil {
+				p.logger.Debug("kubelet.conf not found yet")
+				continue
+			}
+
+			// Check node registration and Ready condition
+			readyCmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig="+kubeconfig, "get", "node", nodeName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}")
+			readyOut, err := readyCmd.Output()
+			if err != nil {
+				p.logger.Debug("Failed to get node status (might not be registered yet or permission error)", zap.Error(err))
+				continue
+			}
+			status := string(bytes.TrimSpace(readyOut))
+			if status != "True" {
+				p.logger.Debug("Node is registered but not Ready yet", zap.String("status", status))
+				continue
+			}
+
+			// 4. Check Lease object heartbeat
+			leaseCmd := exec.CommandContext(ctx, "kubectl", "--kubeconfig="+kubeconfig, "get", "lease", "-n", "kube-node-lease", nodeName)
+			if err := leaseCmd.Run(); err != nil {
+				p.logger.Debug("Node lease not found yet")
+				continue
+			}
+
+			p.logger.Info("Node is registered, healthy, and ready")
+			return nil
 		}
 	}
 }

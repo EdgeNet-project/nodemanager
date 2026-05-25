@@ -95,7 +95,7 @@ func (p *KubernetesProvisioner) Provision(ctx context.Context, node models.Node)
 	}
 
 	// 10. Node Readiness
-	if err := p.waitForNodeReadiness(ctx); err != nil {
+	if err := p.waitForNodeReadiness(ctx, node); err != nil {
 		return fmt.Errorf("failed to wait for node readiness: %w", err)
 	}
 
