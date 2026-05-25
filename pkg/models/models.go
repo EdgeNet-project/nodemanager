@@ -49,3 +49,14 @@ type ActivateRequest struct {
 	Code       string `json:"code"`
 	PublicKey  string `json:"public_key"`
 }
+
+// PingRequest represents the parameters for the ping API
+type PingRequest struct {
+	SystemUUID string `json:"uuid"`
+}
+
+// PingResponse represents the response from the ping API
+type PingResponse struct {
+	Enabled bool   `json:"enabled"`
+	Status  string `json:"status"`
+}

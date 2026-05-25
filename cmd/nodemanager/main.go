@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/heartbeat"
 	"github.com/EdgeNet-project/nodemanager/internal/identity"
 	"github.com/EdgeNet-project/nodemanager/internal/network"
 	"github.com/EdgeNet-project/nodemanager/internal/onboarding"
@@ -117,6 +118,12 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		logger.Info("Kubernetes provisioning completed successfully")
 	}
+
+	/**
+	 * 6. Heartbeat: ping the orchestrator
+	 */
+	logger.Info("Starting heartbeat...")
+	go heartbeat.Run(cmd.Context(), logger, cfg)
 
 	fmt.Println("Nodemanager running, press Ctrl+C to exit")
 	<-cmd.Context().Done()

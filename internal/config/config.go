@@ -12,6 +12,10 @@ type Config struct {
 	Server   string `mapstructure:"server"`
 	Identity string `mapstructure:"identity"`
 	State    string `mapstructure:"state"`
+
+	// Kubernetes specific configuration
+	KubernetesVersion string `mapstructure:"kubernetes_version"`
+	APIServerIP        string `mapstructure:"api_server_ip"`
 }
 
 // Load loads the configuration from the given path
@@ -47,6 +51,14 @@ func Load(configPath string) (*Config, error) {
 
 	if cfg.Server == "" {
 		return nil, fmt.Errorf("server (node API endpoint) is not defined in config")
+	}
+
+	if cfg.APIServerIP == "" {
+		cfg.APIServerIP = "10.0.40.79"
+	}
+
+	if cfg.KubernetesVersion == "" {
+		cfg.KubernetesVersion = "1.31" // Defaulting to a recent version if not specified
 	}
 
 	return &cfg, nil
