@@ -28,6 +28,10 @@ type CheckinRequest struct {
 	IP         string `json:"ip"`
 	SystemUUID string `json:"uuid"`
 	Code       string `json:"code"`
+	Arch       string `json:"arch"`
+	Distro     string `json:"distro"`
+	Version    string `json:"version"`
+	Kernel     string `json:"kernel"`
 }
 
 // CheckinResponse represents the response from the checkin API
