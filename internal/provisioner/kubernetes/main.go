@@ -74,13 +74,18 @@ func (p *KubernetesProvisioner) Provision(ctx context.Context, node models.Node)
 		return fmt.Errorf("failed to write bootstrap kubeconfig: %w", err)
 	}
 
+	// 6a. Write kubernetes API CA pki
+	if err := p.writeKubernetesPKI(bootstrap); err != nil {
+		return fmt.Errorf("failed to write API CA pki: %w", err)
+	}
+
 	// 7. Configure API Server Connectivity
 	if err := p.configureAPIServerConnectivity(); err != nil {
 		return fmt.Errorf("failed to configure api server connectivity: %w", err)
 	}
 
 	// 8. Configure kubelet Service
-	if err := p.configureKubeletService(ctx); err != nil {
+	if err := p.configureKubeletService(ctx, bootstrap); err != nil {
 		return fmt.Errorf("failed to configure kubelet service: %w", err)
 	}
 
