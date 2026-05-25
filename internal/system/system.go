@@ -61,7 +61,11 @@ func GetDistroInfo() (string, string) {
 		return "unknown", "unknown"
 	}
 
-	lines := strings.Split(string(data), "\n")
+	return parseOsRelease(string(data))
+}
+
+func parseOsRelease(content string) (string, string) {
+	lines := strings.Split(content, "\n")
 	var id, version string
 	for _, line := range lines {
 		if strings.HasPrefix(line, "ID=") {
