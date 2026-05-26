@@ -57,3 +57,17 @@ make lint
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributors
+
+- Ciro Scognamiglio · [github](https://github.com/CiroScognamiglio)
+
+
+- dioptra · [web](https://dioptra.io) | [github](https://github.com/dioptra-io) 
+- cslash · [web](https://cslash.com) | [github](https://github.com/cslash)
+
+## Copyright
+
+Copyright © 2026 Sorbonne Université.
+
+See the LICENSE file for licensing details.
