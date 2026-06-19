@@ -23,9 +23,9 @@ type Result struct {
 }
 
 // Run executes all preflight checks, waiting for network availability if necessary.
-func Run(ctx context.Context, logger *zap.Logger) (*Result, error) {
+func Run(ctx context.Context, logger *zap.Logger, orchestratorHost string) (*Result, error) {
 	// Wait for network to be ready (local interface, gateway, internet)
-	if err := WaitUntilNetworkReady(ctx, logger); err != nil {
+	if err := WaitUntilNetworkReady(ctx, logger, orchestratorHost); err != nil {
 		return nil, err
 	}
 
@@ -42,37 +42,56 @@ func Run(ctx context.Context, logger *zap.Logger) (*Result, error) {
 	return RunWithIPs(pubIP, localIPs), nil
 }
 
-// CheckNetwork performs basic network connectivity checks
-func CheckNetwork() error {
+// CheckNetwork performs basic network connectivity checks.
+// Note: ICMP may be filtered on some networks, so ping failures are only logged
+// as warnings rather than treated as fatal errors.
+func CheckNetwork(logger *zap.Logger, orchestratorHost string) error {
 	// 1. Local interface up
 	if !network.IsAnyInterfaceUp() {
 		return fmt.Errorf("no local network interface is up")
 	}
 
-	// 2. Gateway reachable
+	// 2. Gateway reachable (warning only: ICMP might be filtered)
 	gw, err := network.GetDefaultGateway()
 	if err != nil {
-		// On non-linux systems this might fail, for now we might skip or handle differently
-		// but since we are likely on Linux, we want this.
-		// If we can't get it, we still check internet ping.
-	} else {
-		if !network.Ping(gw) {
-			return fmt.Errorf("gateway %s is not reachable", gw)
-		}
+		logger.Warn("Could not determine default gateway", zap.Error(err))
+	} else if !network.Ping(gw) {
+		logger.Warn("Default gateway is not reachable via ping (ICMP might be filtered)",
+			zap.String("gateway", gw))
 	}
 
-	// 3. Internet reachable
+	// 3. DNS server reachable (warning only: ICMP might be filtered)
 	if !network.Ping("8.8.8.8") {
-		return fmt.Errorf("internet is not reachable (ping 8.8.8.8 failed)")
+		logger.Warn("DNS server 8.8.8.8 is not reachable via ping (ICMP might be filtered)")
+	}
+
+	// 4. Resolve orchestrator host (this must succeed)
+	if orchestratorHost == "" {
+		return fmt.Errorf("orchestrator.host is not configured")
+	}
+	addrs, err := net.LookupHost(orchestratorHost)
+	if err != nil {
+		return fmt.Errorf("failed to resolve orchestrator host %q: %w", orchestratorHost, err)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("no IP addresses returned for orchestrator host %q", orchestratorHost)
+	}
+
+	// 5. Ping orchestrator IP (warning only: ICMP might be filtered)
+	orchestratorIP := addrs[0]
+	if !network.Ping(orchestratorIP) {
+		logger.Warn("Orchestrator is not reachable via ping (ICMP might be filtered)",
+			zap.String("host", orchestratorHost),
+			zap.String("ip", orchestratorIP))
 	}
 
 	return nil
 }
 
 // WaitUntilNetworkReady blocks until network connectivity is confirmed, retrying every 5 minutes.
-func WaitUntilNetworkReady(ctx context.Context, logger *zap.Logger) error {
+func WaitUntilNetworkReady(ctx context.Context, logger *zap.Logger, orchestratorHost string) error {
 	for {
-		err := CheckNetwork()
+		err := CheckNetwork(logger, orchestratorHost)
 		if err == nil {
 			logger.Info("Network connectivity verified")
 			return nil

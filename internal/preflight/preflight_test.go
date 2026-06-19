@@ -20,7 +20,7 @@ func TestWaitUntilNetworkReadyCancel(t *testing.T) {
 	// If network is available, it returns nil immediately.
 	// We want to check if it returns error when context is cancelled.
 	// Since we can't easily mock network here, we'll just check if it doesn't hang forever.
-	err := WaitUntilNetworkReady(ctx, logger)
+	err := WaitUntilNetworkReady(ctx, logger, "example.com")
 	if err != nil && err != context.DeadlineExceeded && err != context.Canceled {
 		t.Errorf("Unexpected error: %v", err)
 	}

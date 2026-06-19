@@ -16,6 +16,14 @@ type Config struct {
 	// Kubernetes specific configuration
 	KubernetesVersion string `mapstructure:"kubernetes_version"`
 	APIServerIP       string `mapstructure:"api_server_ip"`
+
+	// Orchestrator configuration
+	Orchestrator OrchestratorConfig `mapstructure:"orchestrator"`
+}
+
+// OrchestratorConfig holds the orchestrator-related configuration
+type OrchestratorConfig struct {
+	Host string `mapstructure:"host"`
 }
 
 // Load loads the configuration from the given path
@@ -47,6 +55,10 @@ func Load(configPath string) (*Config, error) {
 	var cfg Config
 	if err := v.UnmarshalKey("nodemanager", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	if err := v.UnmarshalKey("orchestrator", &cfg.Orchestrator); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal orchestrator config: %w", err)
 	}
 
 	if cfg.Server == "" {

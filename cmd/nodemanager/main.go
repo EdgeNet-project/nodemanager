@@ -67,17 +67,10 @@ func run(cmd *cobra.Command, args []string) {
 	 * Checks network connectivity and system configuration.
 	 */
 	logger.Info("Running preflight checks...")
-	preflightRes, err := preflight.Run(cmd.Context(), logger)
+	preflightRes, err := preflight.Run(cmd.Context(), logger, cfg.Orchestrator.Host)
 	if err != nil {
 		logger.Fatal("Preflight checks failed", zap.Error(err))
 	}
-	logger.Info("Preflight checks completed",
-		zap.String("public_ip", preflightRes.PublicIP),
-		zap.Bool("nat_detected", preflightRes.NATDetected),
-		zap.Bool("port_80_open", preflightRes.Port80Open),
-		zap.Bool("port_443_open", preflightRes.Port443Open),
-		zap.Bool("wg_supported", preflightRes.WGSupported),
-	)
 
 	/**
 	 * 3. Onboarding
@@ -99,13 +92,13 @@ func run(cmd *cobra.Command, args []string) {
 		logger.Fatal("WireGuard setup failed", zap.Error(err))
 	}
 	logger.Info("WireGuard setup completed successfully")
-	
+
 	/**
 	 * 5. Provisioning: kubernetes configuration
 	 */
 	logger.Info("Starting Kubernetes provisioning phase...")
 	prov := kubernetes.New(logger, cfg)
-	
+
 	isProv, err := prov.IsProvisioned(cmd.Context())
 	if err == nil && isProv {
 		logger.Info("Kubernetes is already provisioned, skipping.")
