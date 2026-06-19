@@ -71,6 +71,13 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logger.Fatal("Preflight checks failed", zap.Error(err))
 	}
+	logger.Info("Preflight checks completed",
+		zap.String("publicIP", preflightRes.PublicIP),
+		zap.Bool("natDetected", preflightRes.NATDetected),
+		zap.Bool("port80Open", preflightRes.Port80Open),
+		zap.Bool("port443Open", preflightRes.Port443Open),
+		zap.Bool("wgSupported", preflightRes.WGSupported),
+	)
 
 	/**
 	 * 3. Onboarding
