@@ -115,7 +115,9 @@ func (p *KubernetesProvisioner) installContainerdApt(ctx context.Context) error 
 	archOut, _ := exec.CommandContext(ctx, "dpkg", "--print-architecture").Output()
 	arch := strings.TrimSpace(string(archOut))
 	codename := system.GetOSReleaseValue("VERSION_CODENAME")
-	repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/ubuntu %s stable\n", arch, gpgKeyPath, codename)
+	distro := system.GetOSReleaseValue("ID")
+
+	repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/%s %s stable\n", arch, gpgKeyPath, distro, codename)
 
 	repoCorrect := false
 	if data, err := os.ReadFile(repoPath); err == nil && string(data) == repoLine {
@@ -132,7 +134,7 @@ func (p *KubernetesProvisioner) installContainerdApt(ctx context.Context) error 
 		_ = os.MkdirAll("/etc/apt/keyrings", 0755)
 		_ = os.Remove(gpgKeyPath) // Remove if exists to avoid gpg prompt
 
-		gpgCmd := "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o " + gpgKeyPath
+		gpgCmd := fmt.Sprintf("curl -fsSL https://download.docker.com/linux/%s/gpg | gpg --dearmor -o %s", distro, gpgKeyPath)
 		if err := exec.CommandContext(ctx, "bash", "-c", gpgCmd).Run(); err != nil {
 			return fmt.Errorf("failed to download docker gpg key: %w", err)
 		}
