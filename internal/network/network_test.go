@@ -39,3 +39,21 @@ func TestGetLocalIPs(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureSchema(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"example.com", "https://example.com"},
+		{"http://example.com", "http://example.com"},
+		{"https://example.com", "https://example.com"},
+	}
+
+	for _, tt := range tests {
+		result := ensureSchema(tt.input)
+		if result != tt.expected {
+			t.Errorf("ensureSchema(%s) = %s, expected %s", tt.input, result, tt.expected)
+		}
+	}
+}

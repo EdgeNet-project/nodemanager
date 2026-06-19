@@ -15,6 +15,7 @@ import (
 
 // GetPublicIP returns the public IP address of the node
 func GetPublicIP(orchestratorHost string) (string, error) {
+	orchestratorHost = ensureSchema(orchestratorHost)
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
@@ -36,6 +37,13 @@ func GetPublicIP(orchestratorHost string) (string, error) {
 	}
 
 	return "", fmt.Errorf("failed to get public IP")
+}
+
+func ensureSchema(host string) string {
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		return "https://" + host
+	}
+	return host
 }
 
 // GetLocalIPs returns a list of local IP addresses
