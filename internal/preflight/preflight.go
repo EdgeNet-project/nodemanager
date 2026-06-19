@@ -29,7 +29,7 @@ func Run(ctx context.Context, logger *zap.Logger, orchestratorHost string) (*Res
 		return nil, err
 	}
 
-	pubIP, err := network.GetPublicIP()
+	pubIP, err := network.GetPublicIP(orchestratorHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get public IP: %w", err)
 	}
