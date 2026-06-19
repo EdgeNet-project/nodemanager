@@ -19,7 +19,7 @@ func GetPublicIP(orchestratorHost string) (string, error) {
 		Timeout: 5 * time.Second,
 	}
 
-	resp, err := client.Get(fmt.Sprintf("https://%s/ip", orchestratorHost))
+	resp, err := client.Get(fmt.Sprintf("%s/ip", orchestratorHost))
 	if err != nil {
 		return "", err
 	}
