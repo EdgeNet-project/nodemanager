@@ -13,40 +13,29 @@ import (
 	"time"
 )
 
-var publicIPServices = []string{
-	"https://api.ipify.org",
-	"https://ifconfig.me/ip",
-	"https://ident.me",
-}
-
 // GetPublicIP returns the public IP address of the node
-func GetPublicIP() (string, error) {
+func GetPublicIP(orchestratorHost string) (string, error) {
 	client := http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	var lastErr error
-	for _, service := range publicIPServices {
-		resp, err := client.Get(service)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		defer resp.Body.Close()
+	resp, err := client.Get(fmt.Sprintf("%s/ip", orchestratorHost))
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
 
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		ip := strings.TrimSpace(string(body))
-		if net.ParseIP(ip) != nil {
-			return ip, nil
-		}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
 	}
 
-	return "", fmt.Errorf("failed to get public IP: %v", lastErr)
+	ip := strings.TrimSpace(string(body))
+	if net.ParseIP(ip) != nil {
+		return ip, nil
+	}
+
+	return "", fmt.Errorf("failed to get public IP")
 }
 
 // GetLocalIPs returns a list of local IP addresses

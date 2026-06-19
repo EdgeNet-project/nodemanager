@@ -14,11 +14,9 @@ func TestGetPublicIP(t *testing.T) {
 	defer server.Close()
 
 	// Temporarily override services for testing
-	oldServices := publicIPServices
-	publicIPServices = []string{server.URL}
-	defer func() { publicIPServices = oldServices }()
+	// No need to override publicIPServices anymore
 
-	ip, err := GetPublicIP()
+	ip, err := GetPublicIP(server.URL)
 	if err != nil {
 		t.Fatalf("GetPublicIP failed: %v", err)
 	}
