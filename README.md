@@ -2,6 +2,8 @@
 
 EdgeNet Node Manager is a modular Go agent that runs as a systemd service on nodes contributed to the EdgeNet project. It handles node registration, network setup (WireGuard), and cluster provisioning.
 
+Documentation: [wiki](https://github.com/EdgeNet-project/nodemanager/wiki)
+
 ## Features
 
 - **Modular Provisioning**: Support for multiple backends (Kubernetes, etc.) via a plugin interface.
