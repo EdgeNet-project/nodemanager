@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/identity"
+	"github.com/EdgeNet-project/nodemanager/internal/system"
 	"github.com/EdgeNet-project/nodemanager/internal/system/user"
 	"go.uber.org/zap"
 )
@@ -23,7 +25,19 @@ type User struct {
 func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) error {
 	logger.Info("Starting setup phase...")
 
-	users, err := fetchUsers(ctx, cfg.Orchestrator.Host)
+	id, err := identity.LoadOrCreate(cfg.Identity)
+	if err != nil {
+		logger.Error("Failed to load identity", zap.Error(err))
+		return err
+	}
+
+	systemUUID, err := system.GetSystemUUID()
+	if err != nil {
+		logger.Error("Failed to get system UUID", zap.Error(err))
+		return err
+	}
+
+	users, err := fetchUsers(ctx, cfg.Orchestrator.Host, systemUUID, id.Code)
 	if err != nil {
 		logger.Error("Failed to fetch users from API", zap.Error(err))
 		return err
@@ -71,12 +85,15 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) error {
 	return nil
 }
 
-func fetchUsers(ctx context.Context, host string) ([]User, error) {
+func fetchUsers(ctx context.Context, host, systemUUID, nodeCode string) ([]User, error) {
 	url := fmt.Sprintf("https://%s/install/setup", host)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Set("NODE-UUID", systemUUID)
+	req.Header.Set("NODE-CODE", nodeCode)
 
 	client := &http.Client{
 		Timeout: 10 * time.Second,

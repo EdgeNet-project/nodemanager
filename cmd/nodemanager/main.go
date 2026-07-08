@@ -81,16 +81,7 @@ func run(cmd *cobra.Command, args []string) {
 	)
 
 	/**
-	 * 3. Setup
-	 * Adds a user and a public ssh key.
-	 */
-	logger.Info("Running setup...")
-	if err := setup.Run(cmd.Context(), logger, cfg); err != nil {
-		logger.Fatal("Setup failed", zap.Error(err))
-	}
-
-	/**
-	 * 4. Onboarding
+	 * 3. Onboarding
 	 * Performs checkin with the server, change hostname
 	 * and waits until the node is ENABLED.
 	 */
@@ -100,6 +91,15 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	logger.Info("Onboarding completed successfully")
+
+	/**
+	 * 4. Setup
+	 * Adds a user and a public ssh key.
+	 */
+	logger.Info("Running setup...")
+	if err := setup.Run(cmd.Context(), logger, cfg); err != nil {
+		logger.Fatal("Setup failed", zap.Error(err))
+	}
 
 	/**
 	 * 5. Networking: wiregard configuration
