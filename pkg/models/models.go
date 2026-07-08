@@ -23,16 +23,27 @@ type Wireguard struct {
 	PublicKey           string `json:"public_key"`
 }
 
+// HardwareInfo represents the hardware details
+type HardwareInfo struct {
+	Family  string `json:"product_family"`
+	Name    string `json:"product_name"`
+	Serial  string `json:"product_serial"`
+	SKU     string `json:"product_sku"`
+	UUID    string `json:"product_uuid"`
+	Version string `json:"product_version"`
+	Vendor  string `json:"sys_vendor"`
+}
+
 // CheckinRequest represents the parameters for the checkin API
 type CheckinRequest struct {
-	IP         string `json:"ip"`
-	SystemUUID string `json:"uuid"`
-	Code       string `json:"code"`
-	Arch       string `json:"arch"`
-	Distro     string `json:"distro"`
-	Version    string `json:"version"`
-	Kernel     string `json:"kernel"`
-	ProductUUID string `json:"product_uuid"`
+	IP         string         `json:"ip"`
+	SystemUUID string         `json:"uuid"`
+	Code       string         `json:"code"`
+	Arch       string         `json:"arch"`
+	Distro     string         `json:"distro"`
+	Version    string         `json:"version"`
+	Kernel     string         `json:"kernel"`
+	Hardware   []HardwareInfo `json:"hardware"`
 }
 
 // CheckinResponse represents the response from the checkin API

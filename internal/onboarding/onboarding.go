@@ -38,10 +38,6 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	state.mu.Unlock()
 
 	systemUUID, _ := system.GetSystemUUID()
-	productUUID := ""
-	if data, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil {
-		productUUID = strings.TrimSpace(string(data))
-	}
 	arch := system.GetArch()
 	kernel := system.GetKernelVersion()
 	distro, version := system.GetDistroInfo()
@@ -53,7 +49,8 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	}
 
 	for {
-		resp, err := checkin(cfg.Server, localIP, systemUUID, productUUID, id.Code, arch, distro, version, kernel)
+		hardware := getHardwareInfo()
+		resp, err := checkin(cfg.Server, localIP, systemUUID, []models.HardwareInfo{hardware}, id.Code, arch, distro, version, kernel)
 		if err != nil {
 			logger.Warn("Checkin failed, retrying in 5 minutes", zap.Error(err))
 			select {
@@ -116,16 +113,16 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	}
 }
 
-func checkin(server, ip, uuid, productUUID, code, arch, distro, version, kernel string) (*models.CheckinResponse, error) {
+func checkin(server, ip, uuid string, hardware []models.HardwareInfo, code, arch, distro, version, kernel string) (*models.CheckinResponse, error) {
 	reqBody := models.CheckinRequest{
-		IP:          ip,
-		SystemUUID:  uuid,
-		ProductUUID: productUUID,
-		Code:        code,
-		Arch:        arch,
-		Distro:      distro,
-		Version:     version,
-		Kernel:      kernel,
+		IP:         ip,
+		SystemUUID: uuid,
+		Hardware:   hardware,
+		Code:       code,
+		Arch:       arch,
+		Distro:     distro,
+		Version:    version,
+		Kernel:     kernel,
 	}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
@@ -150,6 +147,25 @@ func checkin(server, ip, uuid, productUUID, code, arch, distro, version, kernel 
 	}
 
 	return &checkinResp, nil
+}
+
+func getHardwareInfo() models.HardwareInfo {
+	info := models.HardwareInfo{}
+	files := map[string]*string{
+		"/sys/class/dmi/id/product_family":  &info.Family,
+		"/sys/class/dmi/id/product_name":    &info.Name,
+		"/sys/class/dmi/id/product_serial":  &info.Serial,
+		"/sys/class/dmi/id/product_sku":     &info.SKU,
+		"/sys/class/dmi/id/product_uuid":    &info.UUID,
+		"/sys/class/dmi/id/product_version": &info.Version,
+		"/sys/class/dmi/id/sys_vendor":      &info.Vendor,
+	}
+	for path, field := range files {
+		if data, err := os.ReadFile(path); err == nil {
+			*field = strings.TrimSpace(string(data))
+		}
+	}
+	return info
 }
 
 func saveNode(path string, node *models.Node) error {

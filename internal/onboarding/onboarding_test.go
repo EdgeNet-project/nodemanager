@@ -18,8 +18,8 @@ func TestCheckin(t *testing.T) {
 			t.Fatalf("failed to decode request: %v", err)
 		}
 		
-		if req.ProductUUID != "test-uuid" {
-			t.Errorf("expected product UUID 'test-uuid', got '%s'", req.ProductUUID)
+		if len(req.Hardware) == 0 || req.Hardware[0].UUID != "test-uuid" {
+			t.Errorf("expected product UUID 'test-uuid', got %+v", req.Hardware)
 		}
 
 		// Respond with a dummy response
@@ -29,7 +29,7 @@ func TestCheckin(t *testing.T) {
 	defer server.Close()
 
 	// Call checkin
-	_, err := checkin(server.URL, "1.1.1.1", "uuid", "test-uuid", "code", "arch", "distro", "version", "kernel")
+	_, err := checkin(server.URL, "1.1.1.1", "uuid", []models.HardwareInfo{{UUID: "test-uuid"}}, "code", "arch", "distro", "version", "kernel")
 	if err != nil {
 		t.Fatalf("checkin failed: %v", err)
 	}
