@@ -61,6 +61,10 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal orchestrator config: %w", err)
 	}
 
+	if err := v.UnmarshalKey("admin", &cfg.Admin); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal admin config: %w", err)
+	}
+
 	if cfg.Server == "" {
 		return nil, fmt.Errorf("server (node API endpoint) is not defined in config")
 	}
@@ -71,6 +75,10 @@ func Load(configPath string) (*Config, error) {
 
 	if cfg.KubernetesVersion == "" {
 		cfg.KubernetesVersion = "1.30"
+	}
+
+	if cfg.Admin.User == "" {
+		cfg.Admin.User = "edgenet"
 	}
 
 	return &cfg, nil

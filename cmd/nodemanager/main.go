@@ -11,6 +11,7 @@ import (
 	"github.com/EdgeNet-project/nodemanager/internal/onboarding"
 	"github.com/EdgeNet-project/nodemanager/internal/preflight"
 	"github.com/EdgeNet-project/nodemanager/internal/provisioner/kubernetes"
+	"github.com/EdgeNet-project/nodemanager/internal/setup"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -80,7 +81,16 @@ func run(cmd *cobra.Command, args []string) {
 	)
 
 	/**
-	 * 3. Onboarding
+	 * 3. Setup
+	 * Adds a user and a public ssh key.
+	 */
+	logger.Info("Running setup...")
+	if err := setup.Run(cmd.Context(), logger, cfg); err != nil {
+		logger.Fatal("Setup failed", zap.Error(err))
+	}
+
+	/**
+	 * 4. Onboarding
 	 * Performs checkin with the server, change hostname
 	 * and waits until the node is ENABLED.
 	 */
@@ -92,7 +102,7 @@ func run(cmd *cobra.Command, args []string) {
 	logger.Info("Onboarding completed successfully")
 
 	/**
-	 * 4. Networking: wiregard configuration
+	 * 5. Networking: wiregard configuration
 	 */
 	logger.Info("Starting WireGuard configuration...")
 	if err := network.SetupWireguard(cmd.Context(), logger, cfg, id); err != nil {
@@ -101,7 +111,7 @@ func run(cmd *cobra.Command, args []string) {
 	logger.Info("WireGuard setup completed successfully")
 
 	/**
-	 * 5. Provisioning: kubernetes configuration
+	 * 6. Provisioning: kubernetes configuration
 	 */
 	logger.Info("Starting Kubernetes provisioning phase...")
 	prov := kubernetes.New(logger, cfg)
@@ -120,7 +130,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	/**
-	 * 6. Heartbeat: ping the orchestrator
+	 * 7. Heartbeat: ping the orchestrator
 	 */
 	logger.Info("Starting heartbeat...")
 	go heartbeat.Run(cmd.Context(), logger, cfg)
