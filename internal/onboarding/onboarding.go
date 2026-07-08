@@ -50,7 +50,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 
 	for {
 		hardware := getHardwareInfo()
-		resp, err := checkin(cfg.Server, localIP, systemUUID, []models.HardwareInfo{hardware}, id.Code, arch, distro, version, kernel)
+		resp, err := checkin(cfg.Server, localIP, systemUUID, hardware, id.Code, arch, distro, version, kernel)
 		if err != nil {
 			logger.Warn("Checkin failed, retrying in 5 minutes", zap.Error(err))
 			select {
