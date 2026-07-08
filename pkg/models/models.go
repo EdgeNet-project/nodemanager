@@ -42,8 +42,8 @@ type CheckinRequest struct {
 	Arch       string         `json:"arch"`
 	Distro     string         `json:"distro"`
 	Version    string         `json:"version"`
-	Kernel     string         `json:"kernel"`
-	Hardware   []HardwareInfo `json:"hardware"`
+	Kernel     string       `json:"kernel"`
+	Hardware   HardwareInfo `json:"hardware"`
 }
 
 // CheckinResponse represents the response from the checkin API

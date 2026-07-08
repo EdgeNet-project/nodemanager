@@ -113,7 +113,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config, id *models
 	}
 }
 
-func checkin(server, ip, uuid string, hardware []models.HardwareInfo, code, arch, distro, version, kernel string) (*models.CheckinResponse, error) {
+func checkin(server, ip, uuid string, hardware models.HardwareInfo, code, arch, distro, version, kernel string) (*models.CheckinResponse, error) {
 	reqBody := models.CheckinRequest{
 		IP:         ip,
 		SystemUUID: uuid,
