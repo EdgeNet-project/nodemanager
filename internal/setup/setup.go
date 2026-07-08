@@ -16,7 +16,7 @@ import (
 
 // User represents a user to be added to the system, as returned by the API.
 type User struct {
-	Username  string `json:"user"`
+	Username  string `json:"name"`
 	PublicKey string `json:"public_key"`
 	Sudo      bool   `json:"sudo"`
 }
@@ -44,6 +44,11 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) error {
 	}
 
 	for _, u := range users {
+		if u.Username == "" {
+			logger.Warn("Skipping user with empty username")
+			continue
+		}
+
 		logger.Info("Processing user", zap.String("user", u.Username))
 
 		exists, err := user.Exists(u.Username)
@@ -86,7 +91,7 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) error {
 }
 
 func fetchUsers(ctx context.Context, host, systemUUID, nodeCode string) ([]User, error) {
-	url := fmt.Sprintf("https://%s/install/setup", host)
+	url := fmt.Sprintf("https://%s/setup/users", host)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
