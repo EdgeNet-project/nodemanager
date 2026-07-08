@@ -32,6 +32,7 @@ type CheckinRequest struct {
 	Distro     string `json:"distro"`
 	Version    string `json:"version"`
 	Kernel     string `json:"kernel"`
+	ProductUUID string `json:"product_uuid"`
 }
 
 // CheckinResponse represents the response from the checkin API
