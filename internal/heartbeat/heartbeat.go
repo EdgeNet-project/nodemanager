@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/EdgeNet-project/nodemanager/internal/config"
+	"github.com/EdgeNet-project/nodemanager/internal/metrics"
 	"github.com/EdgeNet-project/nodemanager/internal/system"
 	"github.com/EdgeNet-project/nodemanager/pkg/models"
 	"go.uber.org/zap"
@@ -21,10 +22,12 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
+	collector := metrics.NewCollector()
+
 	logger.Info("Heartbeat loop started", zap.String("uuid", systemUUID))
 
 	// Run first ping immediately
-	ping(ctx, logger, cfg.Server, systemUUID)
+	ping(ctx, logger, cfg.Server, systemUUID, collector)
 
 	for {
 		select {
@@ -32,15 +35,46 @@ func Run(ctx context.Context, logger *zap.Logger, cfg *config.Config) {
 			logger.Info("Heartbeat loop stopped")
 			return
 		case <-ticker.C:
-			ping(ctx, logger, cfg.Server, systemUUID)
+			ping(ctx, logger, cfg.Server, systemUUID, collector)
 		}
 	}
 }
 
-func ping(ctx context.Context, logger *zap.Logger, server, uuid string) {
+func ping(ctx context.Context, logger *zap.Logger, server, uuid string, collector metrics.Collector) {
 	reqBody := models.PingRequest{
 		SystemUUID: uuid,
 	}
+
+	m, err := collector.Collect()
+	if err != nil {
+		logger.Warn("Failed to collect metrics", zap.Error(err))
+	} else if m != nil {
+		reqBody.Metrics = &models.MetricsPayload{
+			CPU: models.CPUMetrics{
+				UsagePercent: m.CPU.UsagePercent,
+				Load1:        m.CPU.Load1,
+				Load5:        m.CPU.Load5,
+				Load15:       m.CPU.Load15,
+			},
+			IO: models.IOMetrics{
+				ReadBytesPerSec:  m.IO.ReadBytesPerSec,
+				WriteBytesPerSec: m.IO.WriteBytesPerSec,
+			},
+			Network: models.NetworkMetrics{
+				Interfaces: make([]models.InterfaceMetrics, len(m.Network.Interfaces)),
+			},
+		}
+		for i, iface := range m.Network.Interfaces {
+			reqBody.Metrics.Network.Interfaces[i] = models.InterfaceMetrics{
+				Name:          iface.Name,
+				RxBytes:       iface.RxBytes,
+				TxBytes:       iface.TxBytes,
+				RxBytesPerSec: iface.RxBytesPerSec,
+				TxBytesPerSec: iface.TxBytesPerSec,
+			}
+		}
+	}
+
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		logger.Error("Failed to marshal ping request", zap.Error(err))

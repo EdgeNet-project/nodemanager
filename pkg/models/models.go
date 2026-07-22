@@ -36,12 +36,12 @@ type HardwareInfo struct {
 
 // CheckinRequest represents the parameters for the checkin API
 type CheckinRequest struct {
-	IP         string         `json:"ip"`
-	SystemUUID string         `json:"uuid"`
-	Code       string         `json:"code"`
-	Arch       string         `json:"arch"`
-	Distro     string         `json:"distro"`
-	Version    string         `json:"version"`
+	IP         string       `json:"ip"`
+	SystemUUID string       `json:"uuid"`
+	Code       string       `json:"code"`
+	Arch       string       `json:"arch"`
+	Distro     string       `json:"distro"`
+	Version    string       `json:"version"`
 	Kernel     string       `json:"kernel"`
 	Hardware   HardwareInfo `json:"hardware"`
 }
@@ -64,7 +64,40 @@ type ActivateRequest struct {
 
 // PingRequest represents the parameters for the ping API
 type PingRequest struct {
-	SystemUUID string `json:"uuid"`
+	SystemUUID string          `json:"uuid"`
+	Metrics    *MetricsPayload `json:"metrics,omitempty"`
+}
+
+type MetricsPayload struct {
+	CPU     CPUMetrics     `json:"cpu"`
+	IO      IOMetrics      `json:"io"`
+	Network NetworkMetrics `json:"network"`
+}
+
+type CPUMetrics struct {
+	UsagePercent float64 `json:"usage_percent"`
+	Load1        float64 `json:"load1"`
+	Load5        float64 `json:"load5"`
+	Load15       float64 `json:"load15"`
+}
+
+type IOMetrics struct {
+	ReadBytesPerSec  float64 `json:"read_bytes_per_sec"`
+	WriteBytesPerSec float64 `json:"write_bytes_per_sec"`
+}
+
+type NetworkMetrics struct {
+	Interfaces []InterfaceMetrics `json:"interfaces"`
+}
+
+type InterfaceMetrics struct {
+	Name string `json:"name"`
+
+	RxBytes uint64 `json:"rx_bytes"`
+	TxBytes uint64 `json:"tx_bytes"`
+
+	RxBytesPerSec float64 `json:"rx_bytes_per_sec"`
+	TxBytesPerSec float64 `json:"tx_bytes_per_sec"`
 }
 
 // PingResponse represents the response from the ping API
